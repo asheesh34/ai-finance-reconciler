@@ -1,5 +1,7 @@
 # AI Finance Controller — Reconciliation Agent
 
+[![Tests](https://github.com/asheesh34/ai-finance-reconciler/actions/workflows/tests.yml/badge.svg)](https://github.com/asheesh34/ai-finance-reconciler/actions/workflows/tests.yml)
+
 Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 
 ## The problem
@@ -91,6 +93,16 @@ python3 src/report.py
 ```
 
 Output is printed to the console and saved to `data/report.json`.
+
+## Running the tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+12 unit tests cover exact matches, every mismatch/exception type, and
+edge cases like empty input files. These also run automatically via
+GitHub Actions on every push (see the badge above).
 
 ## Design notes
 
