@@ -17,9 +17,20 @@ This is a reconciliation agent that:
 1. Takes two transaction datasets — an internal record set and a bank
    statement (synthetic data, 50+ records, with realistic errors
    deliberately injected).
-2. Matches records by transaction ID and compares amounts.
-3. Classifies every record as **matched**, **mismatched**, or an
-   **exception** (missing on one side, or duplicated).
+2. Matches records by transaction ID, then compares amount, date, and
+   merchant name — not just a raw amount check.
+3. Classifies every record as **matched**, or one of several distinct
+   mismatch/exception types:
+   - `AMOUNT_MISMATCH` — a small unexplained amount difference
+   - `LIKELY_PARTIAL_REFUND` — bank amount meaningfully lower than internal
+   - `MERCHANT_NAME_MISMATCH` — same transaction, bank uses a different
+     label for the merchant
+   - `MISSING_IN_BANK` / `MISSING_IN_INTERNAL` — present on only one side
+   - `DUPLICATE_IN_BANK` — same transaction ID settled more than once
+
+   A settlement delay of a few days (date differs, amount and merchant
+   match) is still counted as **matched** with a note — that's normal
+   behavior, not a real problem.
 4. Uses Claude to generate a plain-English explanation for every
    mismatch and exception — not just a status code.
 5. Reports an honest **match rate**, with the full list of what it could
