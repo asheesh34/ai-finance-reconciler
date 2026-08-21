@@ -9,11 +9,13 @@ Usage:
 import json
 from reconcile import reconcile, load_csv
 from explain import annotate_result
+from agent import run_agent_verification
 
 
 def build_report(internal_path, bank_path):
     result = reconcile(internal_path, bank_path)
     result = annotate_result(result)
+    result = run_agent_verification(result)
     return result
 
 
@@ -26,6 +28,10 @@ def print_report(result):
     print(f"Mismatched (amount differs):   {len(result['mismatched'])}")
     print(f"Unresolved exceptions:         {len(result['exceptions'])}")
     print(f"MATCH RATE: {result['match_rate']}%")
+    print("-" * 64)
+    print(f"AI AGENT independently reviewed {result['agent_total_reviewed']} records")
+    print(f"Agent agreed with verified rules on {result['agent_agreements']} of them")
+    print(f"AGENT AGREEMENT RATE: {result['agent_agreement_rate']}%")
     print("=" * 64)
 
     if result["mismatched"]:
@@ -41,6 +47,16 @@ def print_report(result):
         for e in result["exceptions"]:
             print(f"[{e['transaction_id']}] {e['type']}")
             print(f"  -> {e['explanation']}\n")
+
+    disagreements = [item for item in (result["matched"] + result["mismatched"] + result["exceptions"])
+                     if not item.get("agent_agrees", True)]
+    if disagreements:
+        print("\nAGENT DISAGREEMENTS (agent's independent view vs. verified rules)")
+        print("-" * 64)
+        for d in disagreements:
+            print(f"[{d['transaction_id']}] rules said {d['_ground_truth']}, "
+                  f"agent said {d['agent_label']} (confidence {d['agent_confidence']})")
+            print(f"  agent reasoning: {d['agent_reasoning']}\n")
 
     print("=" * 64)
     print("This system does not guess or force a match. Every unresolved")
