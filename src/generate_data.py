@@ -69,6 +69,40 @@ def build_internal_and_bank(records):
     for r in dups:
         bank.append(dict(r))  # exact duplicate row
 
+    # 5. Simulate partial refunds: bank amount is noticeably lower (10-40%)
+    #    than internal - a real refund, not a rounding/fee mismatch
+    refund_candidates = [r for r in bank if r not in mismatched and r not in dups]
+    refunds = random.sample(refund_candidates, 3)
+    for r in refunds:
+        pct_refunded = random.uniform(0.10, 0.40)
+        r["amount"] = round(r["amount"] * (1 - pct_refunded), 2)
+
+    # 6. Simulate settlement delay: bank date is a few days after internal
+    #    date (real transaction, just settled later - not an error)
+    delay_candidates = [r for r in bank if r not in mismatched and r not in dups and r not in refunds]
+    delayed = random.sample(delay_candidates, 3)
+    for r in delayed:
+        d = datetime.strptime(r["date"], "%Y-%m-%d") + timedelta(days=random.randint(1, 4))
+        r["date"] = d.strftime("%Y-%m-%d")
+
+    # 7. Simulate merchant name inconsistency: bank statement shows a
+    #    slightly different label for the same merchant (abbreviation/case)
+    name_candidates = [r for r in bank if r not in mismatched and r not in dups
+                       and r not in refunds and r not in delayed]
+    renamed = random.sample(name_candidates, 3)
+    NAME_VARIANTS = {
+        "Zomato": "ZOMATO*ORDER",
+        "Swiggy": "SWIGGY LTD",
+        "Amazon": "AMZN MKTPLACE",
+        "Flipkart": "FLIPKART INTERNET",
+        "Myntra": "MYNTRA DESIGNS",
+        "BookMyShow": "BIGTREE ENT",
+        "Ola": "ANI TECH OLA",
+        "Uber": "UBER INDIA",
+    }
+    for r in renamed:
+        r["merchant"] = NAME_VARIANTS.get(r["merchant"], r["merchant"].upper())
+
     random.shuffle(internal)
     random.shuffle(bank)
     return internal, bank
