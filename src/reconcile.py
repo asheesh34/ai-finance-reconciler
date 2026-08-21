@@ -15,9 +15,23 @@ explain.py then turns into plain-English reasons.
 """
 
 import csv
+from datetime import datetime
 from collections import defaultdict
 
-AMOUNT_TOLERANCE = 0.01  # paise-level rounding tolerance, not a real mismatch
+AMOUNT_TOLERANCE = 0.01     # paise-level rounding tolerance, not a real mismatch
+SETTLEMENT_DELAY_DAYS = 5   # date differences within this window are normal settlement lag
+PARTIAL_REFUND_THRESHOLD = 0.05  # bank amount this much lower suggests a refund, not a fee
+
+
+def normalize_merchant(name):
+    """Loosely normalize a merchant label so 'ZOMATO*ORDER' and 'Zomato'
+    are recognized as the same merchant, without needing an exact string match."""
+    return "".join(ch for ch in name.upper() if ch.isalnum())
+
+
+def merchant_names_related(a, b):
+    na, nb = normalize_merchant(a), normalize_merchant(b)
+    return na in nb or nb in na
 
 
 def load_csv(path):
@@ -79,23 +93,72 @@ def reconcile(internal_path, bank_path):
             })
             continue
 
-        # Present on both sides - compare amount
-        i_amt = float(in_recs[0]["amount"])
-        b_amt = float(bank_recs[0]["amount"])
+        # Present on both sides - compare amount, date, and merchant name
+        internal_rec, bank_rec = in_recs[0], bank_recs[0]
+        i_amt = float(internal_rec["amount"])
+        b_amt = float(bank_rec["amount"])
+        amt_diff = round(b_amt - i_amt, 2)
 
-        if abs(i_amt - b_amt) <= AMOUNT_TOLERANCE:
+        i_date = datetime.strptime(internal_rec["date"], "%Y-%m-%d")
+        b_date = datetime.strptime(bank_rec["date"], "%Y-%m-%d")
+        date_gap = abs((b_date - i_date).days)
+
+        merchant_ok = merchant_names_related(internal_rec["merchant"], bank_rec["merchant"])
+
+        amount_ok = abs(amt_diff) <= AMOUNT_TOLERANCE
+        date_ok = date_gap <= SETTLEMENT_DELAY_DAYS
+
+        if amount_ok and date_ok and merchant_ok:
             matched.append({
                 "transaction_id": txn_id,
-                "internal": in_recs[0],
-                "bank": bank_recs[0],
+                "internal": internal_rec,
+                "bank": bank_rec,
             })
-        else:
+        elif amount_ok and not date_ok and merchant_ok:
+            # Amount and merchant line up, only the date is off - this is a
+            # normal settlement delay, not a real problem. Still matched,
+            # but flagged for visibility.
+            matched.append({
+                "transaction_id": txn_id,
+                "internal": internal_rec,
+                "bank": bank_rec,
+                "note": f"Matched with {date_gap}-day settlement delay",
+            })
+        elif not amount_ok and abs(amt_diff) / i_amt >= PARTIAL_REFUND_THRESHOLD and amt_diff < 0:
+            # Bank amount meaningfully lower than internal - likely a
+            # partial refund, distinct from a small fee/rounding mismatch.
+            mismatched.append({
+                "transaction_id": txn_id,
+                "type": "LIKELY_PARTIAL_REFUND",
+                "internal": internal_rec,
+                "bank": bank_rec,
+                "difference": amt_diff,
+            })
+        elif not amount_ok:
             mismatched.append({
                 "transaction_id": txn_id,
                 "type": "AMOUNT_MISMATCH",
-                "internal": in_recs[0],
-                "bank": bank_recs[0],
-                "difference": round(b_amt - i_amt, 2),
+                "internal": internal_rec,
+                "bank": bank_rec,
+                "difference": amt_diff,
+            })
+        elif not merchant_ok:
+            mismatched.append({
+                "transaction_id": txn_id,
+                "type": "MERCHANT_NAME_MISMATCH",
+                "internal": internal_rec,
+                "bank": bank_rec,
+                "difference": 0.0,
+            })
+        else:
+            # Fallback - shouldn't normally hit this, but keep it visible
+            # instead of silently dropping the record.
+            mismatched.append({
+                "transaction_id": txn_id,
+                "type": "UNCLASSIFIED_MISMATCH",
+                "internal": internal_rec,
+                "bank": bank_rec,
+                "difference": amt_diff,
             })
 
     total_considered = len(matched) + len(mismatched) + len(exceptions)
@@ -122,9 +185,9 @@ def print_summary(result):
     print("=" * 60)
 
     if result["mismatched"]:
-        print("\n--- Amount Mismatches ---")
+        print("\n--- Mismatches ---")
         for m in result["mismatched"]:
-            print(f"  {m['transaction_id']}: internal={m['internal']['amount']} "
+            print(f"  {m['transaction_id']} [{m['type']}]: internal={m['internal']['amount']} "
                   f"bank={m['bank']['amount']} diff={m['difference']}")
 
     if result["exceptions"]:

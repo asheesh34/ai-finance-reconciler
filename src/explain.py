@@ -23,15 +23,18 @@ def _describe_record(label, record):
 
 
 def explain_mismatch(item):
-    prompt = f"""A finance reconciliation system found an amount mismatch between an internal
+    prompt = f"""A finance reconciliation system found a mismatch between an internal
 transaction record and a bank statement record for the same transaction ID.
 
+Mismatch type detected by the system: {item['type']}
 {_describe_record("Internal record", item['internal'])}
 {_describe_record("Bank record", item['bank'])}
 Difference (bank - internal): {item['difference']}
 
 In 1-2 short sentences, explain the most likely real-world reason for this
-mismatch (e.g. bank fee, partial refund, currency rounding, gateway charge).
+specific mismatch type (e.g. LIKELY_PARTIAL_REFUND -> a partial refund was
+issued; MERCHANT_NAME_MISMATCH -> the bank uses a different label for the
+same merchant; AMOUNT_MISMATCH -> a fee, rounding, or gateway charge).
 Be concise and specific. Do not repeat the raw numbers back verbatim, just
 explain the likely cause in plain English."""
 

@@ -1,5 +1,7 @@
 # AI Finance Controller — Reconciliation Agent
 
+[![Tests](https://github.com/asheesh34/ai-finance-reconciler/actions/workflows/tests.yml/badge.svg)](https://github.com/asheesh34/ai-finance-reconciler/actions/workflows/tests.yml)
+
 Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 
 ## The problem
@@ -12,22 +14,32 @@ still done by hand at most companies.
 
 ## What this does
 
-This is a reconciliation agent that:
+This is a reconciliation **agent** that:
 
 1. Takes two transaction datasets — an internal record set and a bank
    statement (synthetic data, 50+ records, with realistic errors
    deliberately injected).
-2. Matches records by transaction ID and compares amounts.
-3. Classifies every record as **matched**, **mismatched**, or an
-   **exception** (missing on one side, or duplicated).
-4. Uses Claude to generate a plain-English explanation for every
-   mismatch and exception — not just a status code.
-5. Reports an honest **match rate**, with the full list of what it could
-   not resolve and why.
+2. Runs a deterministic matching engine that compares transaction ID,
+   amount, date, and merchant name, classifying each record as
+   **matched**, or one of several distinct mismatch/exception types
+   (`AMOUNT_MISMATCH`, `LIKELY_PARTIAL_REFUND`, `MERCHANT_NAME_MISMATCH`,
+   `MISSING_IN_BANK`/`MISSING_IN_INTERNAL`, `DUPLICATE_IN_BANK`). A
+   settlement delay of a few days is still counted as matched, since
+   that's normal behavior, not a real problem.
+3. Separately, an AI agent independently looks at every record pair and
+   decides its own classification, with a confidence score and plain
+   reasoning — without being told the deterministic answer first.
+4. Compares the agent's independent judgment against the verified
+   deterministic result and reports an **agreement rate** — a second,
+   honest accuracy metric, not just a plausible-sounding explanation.
+5. Reports an overall **match rate**, the **agent agreement rate**, and
+   every case the agent and the rules disagreed on — visible, not hidden.
 
 This system does not force a match or hide failures. A 100% match rate
 on synthetic data with injected errors would mean something is wrong
-with the matching logic, not that reconciliation is "solved."
+with the matching logic, not that reconciliation is "solved." Likewise,
+100% agent agreement would be suspicious — disagreements are surfaced
+so a human can review them.
 
 ## Example output
 
@@ -63,6 +75,7 @@ UNRESOLVED EXCEPTIONS
 | `src/generate_data.py` | Generates two synthetic CSVs (internal records + bank statement) with deliberately injected missing rows, amount mismatches, and duplicates. |
 | `src/reconcile.py` | Core matching engine — compares the two datasets by transaction ID and amount, classifies every record. |
 | `src/explain.py` | Calls the Claude API to explain each mismatch/exception in plain English. |
+| `src/agent.py` | The agent layer — independently classifies each record pair and compares its judgment against verified ground truth. |
 | `src/report.py` | Combines the above into one final report (console output + `data/report.json`). |
 
 ## Running it
@@ -81,13 +94,28 @@ python3 src/report.py
 
 Output is printed to the console and saved to `data/report.json`.
 
+## Running the tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+12 unit tests cover exact matches, every mismatch/exception type, and
+edge cases like empty input files. These also run automatically via
+GitHub Actions on every push (see the badge above).
+
 ## Design notes
 
-- **Matching, not the AI, decides correctness.** The core matching logic
-  (transaction ID + amount comparison) is deterministic code, not an LLM
-  call — reconciliation numbers need to be exact and reproducible. The
-  AI is used specifically where it adds value: explaining *why* something
-  didn't match, in language a human can act on.
+- **The deterministic engine is the ground truth; the agent is verified
+  against it, not trusted blindly.** Reconciliation numbers need to be
+  exact and reproducible, so the core matching logic (ID, amount, date,
+  merchant) is plain code, not an LLM call. The agent's job is to reason
+  independently and be *checked* against that ground truth — its
+  agreement rate is a measured accuracy number, not an assumption.
+- **Disagreements are surfaced, not resolved silently.** When the agent's
+  independent judgment differs from the verified rules, both views are
+  shown. A human reviewer decides which one to trust, rather than the
+  system quietly picking one.
 - **Tolerance for rounding, not for real mismatches.** A configurable
   tolerance (`AMOUNT_TOLERANCE` in `reconcile.py`) avoids flagging
   paise-level rounding as a false mismatch.
