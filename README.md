@@ -94,6 +94,30 @@ python3 src/report.py
 
 Output is printed to the console and saved to `data/report.json`.
 
+## Using real data from RewindDB (optional)
+
+This project can reconcile against genuine data instead of the synthetic
+CSV, by pulling records from a running [RewindDB](https://github.com/asheesh34/rewinddb-mini)
+instance — the change-capture / audit-trail system this was built to
+extend.
+
+```bash
+# With RewindDB's backend running locally (localhost:8080):
+
+# 1. Push the synthetic transactions into RewindDB's real API
+python3 src/push_to_rewinddb.py
+
+# 2. Pull them back out of RewindDB's own Postgres change_events table
+python3 src/pull_from_rewinddb.py
+
+# 3. Reconcile against the real data that came back
+python3 src/report.py --source rewinddb
+```
+
+The bank statement side stays synthetic either way (no real bank data
+is available), but the internal-records side now comes from a real
+system with a real API and a real database, not a static file.
+
 ## Running the tests
 
 ```bash
