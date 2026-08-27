@@ -71,7 +71,27 @@ def save_report_json(result, path="data/report.json"):
 
 
 if __name__ == "__main__":
-    result = build_report("data/internal_records.csv", "data/bank_statement.csv")
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Run reconciliation and generate the final report."
+    )
+    parser.add_argument(
+        "--source", choices=["synthetic", "rewinddb"], default="synthetic",
+        help=("Which internal_records source to use: 'synthetic' reads "
+              "data/internal_records.csv (fake data), 'rewinddb' reads "
+              "data/internal_records_from_rewinddb.csv (real data pulled "
+              "from a running RewindDB instance via pull_from_rewinddb.py).")
+    )
+    args = parser.parse_args()
+
+    internal_path = (
+        "data/internal_records_from_rewinddb.csv" if args.source == "rewinddb"
+        else "data/internal_records.csv"
+    )
+
+    print(f"Using internal records source: {internal_path}\n")
+    result = build_report(internal_path, "data/bank_statement.csv")
     print_report(result)
     save_report_json(result)
     print(f"\nFull report saved to data/report.json")
