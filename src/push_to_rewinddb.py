@@ -55,8 +55,8 @@ def register_or_login():
 
 
 def _extract_token(data):
-    # Response may be wrapped in a common ApiResponse envelope - handle both shapes
-    payload = data.get("data", data)
+    # Response may or may not be wrapped in a common envelope - handle both shapes
+    payload = data.get("data", data) if isinstance(data, dict) else data
     token = payload.get("token") or payload.get("accessToken") or payload.get("jwt")
     if not token:
         raise RuntimeError(f"Could not find auth token in response: {data}")
@@ -67,9 +67,9 @@ def get_or_create_connection(headers):
     """Creates the demo DatabaseConnection, or reuses an existing one with the same name."""
     resp = requests.get(f"{BASE_URL}/connections", headers=headers)
     resp.raise_for_status()
-    existing = resp.json().get("data", resp.json())
-    if isinstance(existing, dict) and "content" in existing:
-        existing = existing["content"]  # paginated response shape
+    existing = resp.json()
+    if isinstance(existing, dict):
+        existing = existing.get("data", existing.get("content", []))
     for conn in existing:
         if conn.get("name") == CONNECTION_NAME:
             return conn["id"]
@@ -83,7 +83,9 @@ def get_or_create_connection(headers):
         "password": "demo_password",
     })
     resp.raise_for_status()
-    data = resp.json().get("data", resp.json())
+    data = resp.json()
+    if isinstance(data, dict) and "data" in data:
+        data = data["data"]
     return data["id"]
 
 
