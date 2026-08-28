@@ -16,7 +16,7 @@ Where the two disagree, both views are reported rather than silently
 picking one - that disagreement is itself useful signal for a human
 reviewer.
 
-Uses Google's free-tier Gemini API (via llm_client.py) - no billing
+Uses a free-tier AI API (via llm_client.py) - no billing
 required to run this.
 """
 

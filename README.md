@@ -74,7 +74,7 @@ UNRESOLVED EXCEPTIONS
 |---|---|
 | `src/generate_data.py` | Generates two synthetic CSVs (internal records + bank statement) with deliberately injected missing rows, amount mismatches, and duplicates. |
 | `src/reconcile.py` | Core matching engine — compares the two datasets by transaction ID and amount, classifies every record. |
-| `src/explain.py` | Calls the Gemini API (free tier) to explain each mismatch/exception in plain English. |
+| `src/explain.py` | Calls a free-tier AI API to explain each mismatch/exception in plain English. |
 | `src/agent.py` | The agent layer — independently classifies each record pair and compares its judgment against verified ground truth. |
 | `src/report.py` | Combines the above into one final report (console output + `data/report.json`). |
 
@@ -83,7 +83,7 @@ UNRESOLVED EXCEPTIONS
 ```bash
 pip install -r requirements.txt
 
-export GEMINI_API_KEY=your_key_here   # free key: https://aistudio.google.com/app/apikey
+export AI_API_KEY=your_key_here   # get a free key: https://aistudio.google.com/app/apikey
 
 # 1. Generate synthetic data
 python3 src/generate_data.py
@@ -138,7 +138,7 @@ rather than checking it against the same logic it might share blind
 spots with.
 
 ```bash
-export GEMINI_API_KEY=your_key_here   # free key: https://aistudio.google.com/app/apikey
+export AI_API_KEY=your_key_here   # get a free key: https://aistudio.google.com/app/apikey
 python3 tests/eval_agent.py
 ```
 

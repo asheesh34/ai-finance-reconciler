@@ -4,8 +4,8 @@ short, plain-English explanation for each exception / mismatch, so a
 human reading the report understands *why* something couldn't be
 resolved automatically - not just a status code.
 
-Uses Google's free-tier Gemini API (via llm_client.py) - no billing
-required to run this. Requires GEMINI_API_KEY to be set in the
+Uses a free-tier AI API (via llm_client.py) - no billing
+required to run this. Requires AI_API_KEY to be set in the
 environment (get a free key at https://aistudio.google.com/app/apikey).
 """
 
