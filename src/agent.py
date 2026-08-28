@@ -2,7 +2,7 @@
 The reconciliation agent.
 
 Unlike explain.py (which narrates a label the deterministic code already
-computed), this module has Claude independently look at a record pair and
+computed), this module has the AI independently look at a record pair and
 DECIDE the classification itself, with a confidence level and reasoning.
 
 The deterministic logic in reconcile.py still runs, but here it is used as
@@ -15,16 +15,14 @@ measured percentage of cases."
 Where the two disagree, both views are reported rather than silently
 picking one - that disagreement is itself useful signal for a human
 reviewer.
+
+Uses Google's free-tier Gemini API (via llm_client.py) - no billing
+required to run this.
 """
 
-import os
 import json
 import re
-from anthropic import Anthropic
-
-client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-
-MODEL = "claude-sonnet-4-6"
+from llm_client import call_llm
 
 VALID_LABELS = {
     "MATCH",
@@ -48,7 +46,7 @@ def _record_str(label, record):
 
 def classify_pair(internal_record, bank_record):
     """
-    Asks Claude to independently classify a record pair (or a one-sided
+    Asks the AI to independently classify a record pair (or a one-sided
     record, for missing/duplicate cases) and return a structured decision.
 
     Returns a dict: {label, confidence (0-1), reasoning}
@@ -81,12 +79,7 @@ Choose exactly one label from this list:
 Respond with ONLY a JSON object, no other text, in this exact format:
 {{"label": "...", "confidence": 0.0, "reasoning": "one short sentence"}}"""
 
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=200,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = resp.content[0].text.strip()
+    raw = call_llm(prompt, max_tokens=200)
 
     # Be defensive - strip markdown fences if the model adds them anyway
     raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()

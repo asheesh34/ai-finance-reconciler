@@ -1,19 +1,16 @@
 """
-Takes the structured output of reconcile.py and asks Claude to write a
+Takes the structured output of reconcile.py and asks the AI to write a
 short, plain-English explanation for each exception / mismatch, so a
 human reading the report understands *why* something couldn't be
 resolved automatically - not just a status code.
 
-Requires ANTHROPIC_API_KEY to be set in the environment.
+Uses Google's free-tier Gemini API (via llm_client.py) - no billing
+required to run this. Requires GEMINI_API_KEY to be set in the
+environment (get a free key at https://aistudio.google.com/app/apikey).
 """
 
-import os
 import json
-from anthropic import Anthropic
-
-client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-
-MODEL = "claude-sonnet-4-6"
+from llm_client import call_llm
 
 
 def _describe_record(label, record):
@@ -38,12 +35,7 @@ same merchant; AMOUNT_MISMATCH -> a fee, rounding, or gateway charge).
 Be concise and specific. Do not repeat the raw numbers back verbatim, just
 explain the likely cause in plain English."""
 
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=150,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return resp.content[0].text.strip()
+    return call_llm(prompt, max_tokens=150)
 
 
 def explain_exception(item):
@@ -58,12 +50,7 @@ In 1-2 short sentences, explain in plain English what this exception type
 usually means in a real payments/finance context, and what a human should
 check next. Be concise and specific."""
 
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=150,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return resp.content[0].text.strip()
+    return call_llm(prompt, max_tokens=150)
 
 
 def annotate_result(result):
