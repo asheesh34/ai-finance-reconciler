@@ -124,9 +124,28 @@ system with a real API and a real database, not a static file.
 python -m unittest discover -s tests -v
 ```
 
-12 unit tests cover exact matches, every mismatch/exception type, and
+17 unit tests cover exact matches, every mismatch/exception type, and
 edge cases like empty input files. These also run automatically via
 GitHub Actions on every push (see the badge above).
+
+## Evaluating the agent against human judgment
+
+Beyond the unit tests, `tests/eval_set.py` is a small, hand-labeled
+evaluation set: 18 transaction pairs where a human decided the correct
+answer directly, independent of the code's own matching rules. This
+lets us measure the agent's accuracy against real human judgment
+rather than checking it against the same logic it might share blind
+spots with.
+
+```bash
+export ANTHROPIC_API_KEY=your_key_here
+python3 tests/eval_agent.py
+```
+
+This reports overall accuracy plus precision/recall per label, and
+prints every case the agent got wrong alongside the human's original
+reasoning - so mistakes are visible, not hidden behind a summary
+number.
 
 ## Design notes
 
