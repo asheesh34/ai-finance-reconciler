@@ -12,7 +12,7 @@ prints every case the agent got wrong so the mistakes are visible,
 not just the summary number.
 
 Usage:
-    export ANTHROPIC_API_KEY=your_key_here
+    export GEMINI_API_KEY=your_key_here
     python3 tests/eval_agent.py
 """
 
