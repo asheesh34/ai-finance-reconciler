@@ -49,11 +49,13 @@ def _wait_for_rate_limit():
     _last_call_time = time.time()
 
 
-def call_llm(prompt, max_tokens=300, retries=1):
+def call_llm(prompt, max_tokens=300, retries=2):
     """
     Sends a single-turn prompt to a working model and returns the plain
     text response. Automatically paces calls to respect free-tier rate
-    limits, and retries with backoff on 429 (rate limited) responses.
+    limits, and retries the same model with backoff on rate limits (429)
+    and transient network errors (timeouts, connection drops) before
+    giving up on that model and trying the next candidate.
     """
     global _working_model
 
@@ -83,8 +85,6 @@ def call_llm(prompt, max_tokens=300, retries=1):
                 )
 
                 if resp.status_code == 429:
-                    # Rate limited - wait longer and retry the SAME model,
-                    # this isn't a reason to move to a different one.
                     wait_time = 20 * (attempt + 1)
                     print(f"  Rate limited, waiting {wait_time}s before retrying...", flush=True)
                     time.sleep(wait_time)
@@ -97,9 +97,23 @@ def call_llm(prompt, max_tokens=300, retries=1):
                 _working_model = model
                 return text
 
-            except (requests.exceptions.RequestException, KeyError, IndexError) as e:
+            except requests.exceptions.RequestException as e:
+                # Transient network issue (timeout, connection drop) -
+                # retry the same model with a short backoff rather than
+                # immediately giving up on it.
                 last_error = e
-                break  # move to the next candidate model
+                if attempt < retries:
+                    wait_time = 5 * (attempt + 1)
+                    print(f"  Network hiccup ({type(e).__name__}), retrying in {wait_time}s...", flush=True)
+                    time.sleep(wait_time)
+                    attempt += 1
+                    continue
+                break  # exhausted retries on this model, try the next candidate
+
+            except (KeyError, IndexError) as e:
+                # Unexpected response shape - not transient, move on
+                last_error = e
+                break
 
     raise RuntimeError(
         f"All candidate models failed (tried {models_to_try}). "

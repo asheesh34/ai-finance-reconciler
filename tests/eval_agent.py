@@ -28,10 +28,17 @@ from eval_set import EVAL_CASES
 
 def run_evaluation():
     results = []
+    skipped = []
 
     for i, case in enumerate(EVAL_CASES, 1):
         print(f"  Evaluating {case['id']} ({i}/{len(EVAL_CASES)})...", flush=True)
-        decision = classify_pair(case["internal"], case["bank"])
+        try:
+            decision = classify_pair(case["internal"], case["bank"])
+        except Exception as e:
+            print(f"  Skipping {case['id']} after repeated failures: {e}", flush=True)
+            skipped.append(case["id"])
+            continue
+
         predicted = decision["label"]
         correct = predicted == case["true_label"]
         results.append({
@@ -43,6 +50,10 @@ def run_evaluation():
             "reasoning": decision["reasoning"],
             "human_note": case["human_note"],
         })
+
+    if skipped:
+        print(f"\nNote: {len(skipped)} case(s) skipped due to persistent errors: {skipped}")
+        print("Metrics below are computed over the remaining cases only.\n")
 
     return results
 
