@@ -74,7 +74,7 @@ UNRESOLVED EXCEPTIONS
 |---|---|
 | `src/generate_data.py` | Generates two synthetic CSVs (internal records + bank statement) with deliberately injected missing rows, amount mismatches, and duplicates. |
 | `src/reconcile.py` | Core matching engine — compares the two datasets by transaction ID and amount, classifies every record. |
-| `src/explain.py` | Calls the Claude API to explain each mismatch/exception in plain English. |
+| `src/explain.py` | Calls a free-tier AI API to explain each mismatch/exception in plain English. |
 | `src/agent.py` | The agent layer — independently classifies each record pair and compares its judgment against verified ground truth. |
 | `src/report.py` | Combines the above into one final report (console output + `data/report.json`). |
 
@@ -83,7 +83,7 @@ UNRESOLVED EXCEPTIONS
 ```bash
 pip install -r requirements.txt
 
-export ANTHROPIC_API_KEY=your_key_here
+export AI_API_KEY=your_key_here   # get a free key: https://aistudio.google.com/app/apikey
 
 # 1. Generate synthetic data
 python3 src/generate_data.py
@@ -124,9 +124,28 @@ system with a real API and a real database, not a static file.
 python -m unittest discover -s tests -v
 ```
 
-12 unit tests cover exact matches, every mismatch/exception type, and
+17 unit tests cover exact matches, every mismatch/exception type, and
 edge cases like empty input files. These also run automatically via
 GitHub Actions on every push (see the badge above).
+
+## Evaluating the agent against human judgment
+
+Beyond the unit tests, `tests/eval_set.py` is a small, hand-labeled
+evaluation set: 18 transaction pairs where a human decided the correct
+answer directly, independent of the code's own matching rules. This
+lets us measure the agent's accuracy against real human judgment
+rather than checking it against the same logic it might share blind
+spots with.
+
+```bash
+export AI_API_KEY=your_key_here   # get a free key: https://aistudio.google.com/app/apikey
+python3 tests/eval_agent.py
+```
+
+This reports overall accuracy plus precision/recall per label, and
+prints every case the agent got wrong alongside the human's original
+reasoning - so mistakes are visible, not hidden behind a summary
+number.
 
 ## Design notes
 
