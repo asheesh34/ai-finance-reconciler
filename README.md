@@ -4,6 +4,24 @@
 
 Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 
+## Results
+
+- **Deterministic match rate:** ~75-80% on 50+ synthetic transactions
+  with deliberately injected errors (varies per run, since errors are
+  randomly injected — see `data/report.json` after running).
+- **Agent accuracy: 83.3%** against a held-out, hand-labeled evaluation
+  set of 18 transaction pairs — where a human decided the correct
+  answer directly, independent of this project's own matching rules.
+  Full precision/recall per label in `tests/eval_agent.py` output.
+- The 3 misclassified cases in that evaluation were defensible edge
+  cases (e.g. a 50-paisa difference called a mismatch instead of
+  rounding), not random errors — every mistake is logged with the
+  agent's reasoning alongside the human's original reasoning.
+- The internal-records side of the reconciliation is pulled from a
+  real, running instance of [RewindDB](https://github.com/asheesh34/rewinddb-mini)
+  (this author's own change-capture system) via its actual REST API,
+  not a static file.
+
 ## The problem
 
 Every business has two versions of the truth for its money: what its own
