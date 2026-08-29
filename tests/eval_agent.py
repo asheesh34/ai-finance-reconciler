@@ -29,7 +29,8 @@ from eval_set import EVAL_CASES
 def run_evaluation():
     results = []
 
-    for case in EVAL_CASES:
+    for i, case in enumerate(EVAL_CASES, 1):
+        print(f"  Evaluating {case['id']} ({i}/{len(EVAL_CASES)})...", flush=True)
         decision = classify_pair(case["internal"], case["bank"])
         predicted = decision["label"]
         correct = predicted == case["true_label"]
