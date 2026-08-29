@@ -39,11 +39,11 @@ def _url_for(model):
     return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
-def call_llm(prompt, max_tokens=300):
+def call_llm(prompt, max_tokens=300, retries=1):
     """
     Sends a single-turn prompt to a working model and returns the plain
     text response. Raises a clear error if the API key is missing or
-    every candidate model fails.
+    every candidate model fails after retries.
     """
     global _working_model
 
@@ -58,24 +58,25 @@ def call_llm(prompt, max_tokens=300):
     last_error = None
 
     for model in models_to_try:
-        try:
-            resp = requests.post(
-                _url_for(model),
-                params={"key": AI_API_KEY},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": max_tokens},
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            _working_model = model  # remember this one worked, skip probing next time
-            return text
-        except (requests.exceptions.HTTPError, KeyError, IndexError) as e:
-            last_error = e
-            continue
+        for attempt in range(retries + 1):
+            try:
+                resp = requests.post(
+                    _url_for(model),
+                    params={"key": AI_API_KEY},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"maxOutputTokens": max_tokens},
+                    },
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                _working_model = model  # remember this one worked, skip probing next time
+                return text
+            except (requests.exceptions.RequestException, KeyError, IndexError) as e:
+                last_error = e
+                continue
 
     raise RuntimeError(
         f"All candidate models failed (tried {models_to_try}). "
