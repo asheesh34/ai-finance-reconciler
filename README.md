@@ -13,25 +13,34 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 - **Deterministic match rate:** ~75-80% on 50+ synthetic transactions
   with deliberately injected errors (varies per run, since errors are
   randomly injected — see `data/report.json` after running).
-- **Agent accuracy: 83.3%** on auto-resolved cases against a held-out,
-  hand-labeled evaluation set of 18 transaction pairs — where a human
-  decided the correct answer directly, independent of this project's
-  own matching rules. Full precision/recall per label in
-  `tests/eval_agent.py` output.
+- **Agent accuracy: 75-85% on auto-resolved cases** across repeated runs
+  against a held-out, hand-labeled evaluation set of 18 transaction
+  pairs — where a human decided the correct answer directly, independent
+  of this project's own matching rules. The LLM is not deterministic, so
+  this is reported as a range from multiple runs (e.g. 83.3% and 77.8%
+  observed), not a single cherry-picked number. Full precision/recall
+  per label in `tests/eval_agent.py` output.
   **Caveat:** n=18 with only 1-3 examples per label is a diagnostic
   sample, not a statistically robust benchmark — a single case flips
   a category's precision/recall between 0% and 100%. Expanding this
   set is the natural next step (see What's next).
-- **The agent defers instead of guessing when uncertain.** If its own
-  stated confidence falls below a threshold, it returns
-  `NEEDS_HUMAN_REVIEW` instead of forcing a label — a deferral is
-  tracked separately from a wrong answer, since declining to
-  auto-resolve an ambiguous case is the safe, correct behavior, not
-  a failure.
-- The 3 misclassified cases in that evaluation were defensible edge
-  cases (e.g. a 50-paisa difference called a mismatch instead of
-  rounding), not random errors — every mistake is logged with the
-  agent's reasoning alongside the human's original reasoning.
+- **The agent supports confidence-based deferral to human review** —
+  if its own stated confidence falls below `CONFIDENCE_THRESHOLD`
+  (default 0.6, overridable via environment variable), it returns
+  `NEEDS_HUMAN_REVIEW` instead of forcing a label. This default has
+  **not been calibrated** against `eval_set.py` or any other validation
+  data — it is an unvalidated starting point, not a tuned value. In the
+  most recent evaluation run, the agent was confidently wrong on 4 of 18
+  cases (confidence 0.85-0.95) and deferred 0 times — meaning the
+  mechanism exists and is exercised by tests, but its effectiveness at
+  the current threshold has not yet been demonstrated on real mistakes.
+  This is disclosed rather than hidden; calibrating the threshold
+  against a larger evaluation set is on the roadmap.
+- The 3-4 misclassified cases across evaluation runs were defensible
+  edge cases (e.g. a 50-paisa difference called a mismatch instead of
+  rounding, or a 2% difference called a refund instead of a fee), not
+  random errors — every mistake is logged with the agent's reasoning
+  alongside the human's original reasoning.
 - The internal-records side of the reconciliation is pulled from a
   real, running instance of [RewindDB](https://github.com/asheesh34/rewinddb-mini)
   (this author's own change-capture system) via its actual REST API,
@@ -208,10 +217,15 @@ number.
   independent judgment differs from the verified rules, both views are
   shown. A human reviewer decides which one to trust, rather than the
   system quietly picking one.
-- **The agent knows when to stop.** Below a confidence threshold, it
-  returns `NEEDS_HUMAN_REVIEW` instead of forcing a label, with its
-  original lean preserved for the reviewer. A confidently wrong answer
-  is worse than an honest "I'm not sure."
+- **The agent supports deferring to a human, though the threshold is
+  unproven.** Below `CONFIDENCE_THRESHOLD` (default 0.6, set via
+  environment variable, unvalidated), the final label is overridden to
+  `NEEDS_HUMAN_REVIEW` with the model's original lean preserved for the
+  reviewer — this is tested end-to-end (`tests/test_agent.py`). What
+  isn't yet proven is that 0.6 is the right cutoff: a live run produced
+  4 confidently-wrong answers (0.85-0.95 confidence) and 0 deferrals.
+  The mechanism is real and exercised; its calibration is not yet
+  demonstrated.
 - **Tolerance for rounding, not for real mismatches.** A configurable
   tolerance (`AMOUNT_TOLERANCE` in `reconcile.py`) avoids flagging
   paise-level rounding as a false mismatch.
@@ -220,6 +234,10 @@ number.
 
 ## What's next
 
+- Calibrate `CONFIDENCE_THRESHOLD` against a larger evaluation set
+  (e.g. sweep values and pick the one that actually catches the most
+  wrong-but-confident answers) instead of using the current unvalidated
+  0.6 default.
 - Expand the hand-labeled evaluation set beyond 18 cases (3+ per label)
   for statistically meaningful precision/recall, not just a diagnostic
   signal.
