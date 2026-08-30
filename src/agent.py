@@ -21,14 +21,42 @@ required to run this.
 """
 
 import json
+import os
 import re
 from llm_client import call_llm
 
+_DEFAULT_CONFIDENCE_THRESHOLD = 0.6
+
+
+def _load_confidence_threshold():
+    """
+    Reads CONFIDENCE_THRESHOLD from the environment, following the same
+    override pattern as AI_MODEL in llm_client.py. Falls back to the
+    default on any invalid value (unparseable, or outside 0.0-1.0) rather
+    than raising - a misconfigured threshold should not crash the tool.
+
+    0.60 is currently an UNVALIDATED default: it was not derived from
+    a sweep against tests/eval_set.py or any other validation data. It
+    is a conservative starting point, documented as such rather than
+    presented as tuned.
+    """
+    raw = os.environ.get("CONFIDENCE_THRESHOLD")
+    if raw is None:
+        return _DEFAULT_CONFIDENCE_THRESHOLD
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_CONFIDENCE_THRESHOLD
+    if not (0.0 <= value <= 1.0):
+        return _DEFAULT_CONFIDENCE_THRESHOLD
+    return value
+
+
 # Below this confidence, the agent defers to a human instead of forcing
-# a guess. This is a deliberate design choice, not a missing feature:
-# a finance controller that confidently guesses wrong is worse than one
-# that says "I'm not sure, a human should look at this."
-CONFIDENCE_THRESHOLD = 0.6
+# a guess. See _load_confidence_threshold's docstring: this default is
+# unvalidated, not calibrated against evaluation data. Override with the
+# CONFIDENCE_THRESHOLD environment variable.
+CONFIDENCE_THRESHOLD = _load_confidence_threshold()
 
 VALID_LABELS = {
     "MATCH",
