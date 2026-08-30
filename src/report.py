@@ -30,8 +30,9 @@ def print_report(result):
     print(f"MATCH RATE: {result['match_rate']}%")
     print("-" * 64)
     print(f"AI AGENT independently reviewed {result['agent_total_reviewed']} records")
-    print(f"Agent agreed with verified rules on {result['agent_agreements']} of them")
-    print(f"AGENT AGREEMENT RATE: {result['agent_agreement_rate']}%")
+    print(f"  Deferred to human (low confidence): {result['agent_deferrals']} ({result['agent_deferral_rate']}%)")
+    print(f"  Auto-resolved and agreed with verified rules: {result['agent_agreements']}")
+    print(f"AGENT AGREEMENT RATE (of auto-resolved cases): {result['agent_agreement_rate']}%")
     print("=" * 64)
 
     if result["mismatched"]:
@@ -48,8 +49,19 @@ def print_report(result):
             print(f"[{e['transaction_id']}] {e['type']}")
             print(f"  -> {e['explanation']}\n")
 
-    disagreements = [item for item in (result["matched"] + result["mismatched"] + result["exceptions"])
-                     if not item.get("agent_agrees", True)]
+    all_reviewed = result["matched"] + result["mismatched"] + result["exceptions"]
+
+    deferred_items = [item for item in all_reviewed if item.get("agent_deferred")]
+    if deferred_items:
+        print("\nDEFERRED TO HUMAN REVIEW (agent confidence too low to auto-resolve)")
+        print("-" * 64)
+        for d in deferred_items:
+            print(f"[{d['transaction_id']}] rules said {d['_ground_truth']}, "
+                  f"agent leaned toward {d['agent_raw_label']} (confidence {d['agent_confidence']})")
+            print(f"  agent reasoning: {d['agent_reasoning']}\n")
+
+    disagreements = [item for item in all_reviewed
+                     if not item.get("agent_deferred") and not item.get("agent_agrees", True)]
     if disagreements:
         print("\nAGENT DISAGREEMENTS (agent's independent view vs. verified rules)")
         print("-" * 64)

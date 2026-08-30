@@ -24,6 +24,12 @@ import json
 import re
 from llm_client import call_llm
 
+# Below this confidence, the agent defers to a human instead of forcing
+# a guess. This is a deliberate design choice, not a missing feature:
+# a finance controller that confidently guesses wrong is worse than one
+# that says "I'm not sure, a human should look at this."
+CONFIDENCE_THRESHOLD = 0.6
+
 VALID_LABELS = {
     "MATCH",
     "AMOUNT_MISMATCH",
@@ -34,6 +40,10 @@ VALID_LABELS = {
     "MISSING_IN_INTERNAL",
     "DUPLICATE_IN_BANK",
     "UNRESOLVED",
+    "NEEDS_HUMAN_REVIEW",  # not one of the LLM's raw choices - assigned
+                           # by this code when confidence is too low to
+                           # safely auto-resolve, regardless of which
+                           # label the LLM leaned toward
 }
 
 
@@ -49,7 +59,13 @@ def classify_pair(internal_record, bank_record):
     Asks the AI to independently classify a record pair (or a one-sided
     record, for missing/duplicate cases) and return a structured decision.
 
-    Returns a dict: {label, confidence (0-1), reasoning}
+    If the model's own confidence is below CONFIDENCE_THRESHOLD, the
+    final label is overridden to NEEDS_HUMAN_REVIEW - the agent deferring
+    rather than forcing a low-confidence guess. The model's original
+    lean is preserved as raw_label so a human reviewer still sees what
+    the agent suspected, even when it chose not to act on it.
+
+    Returns a dict: {label, raw_label, confidence, reasoning, deferred}
     """
     prompt = f"""You are a finance reconciliation agent. Look at this transaction record
 pair (from an internal ledger vs. a bank statement) and independently decide
@@ -76,6 +92,11 @@ Choose exactly one label from this list:
   bank statement
 - UNRESOLVED: none of the above cleanly applies
 
+Give an honest confidence score (0.0-1.0). If the case is genuinely
+ambiguous or multiple things look wrong at once, give a LOWER confidence
+rather than forcing a clean-sounding label - do not inflate confidence
+just to sound decisive.
+
 Respond with ONLY a JSON object, no other text, in this exact format:
 {{"label": "...", "confidence": 0.0, "reasoning": "one short sentence"}}"""
 
@@ -86,16 +107,24 @@ Respond with ONLY a JSON object, no other text, in this exact format:
 
     try:
         parsed = json.loads(raw)
-        label = parsed.get("label", "UNRESOLVED")
-        if label not in VALID_LABELS:
-            label = "UNRESOLVED"
-        return {
-            "label": label,
-            "confidence": float(parsed.get("confidence", 0.0)),
-            "reasoning": parsed.get("reasoning", ""),
-        }
+        raw_label = parsed.get("label", "UNRESOLVED")
+        if raw_label not in VALID_LABELS or raw_label == "NEEDS_HUMAN_REVIEW":
+            raw_label = "UNRESOLVED"  # NEEDS_HUMAN_REVIEW is never the model's own choice
+        confidence = float(parsed.get("confidence", 0.0))
+        reasoning = parsed.get("reasoning", "")
     except (json.JSONDecodeError, ValueError):
-        return {"label": "UNRESOLVED", "confidence": 0.0, "reasoning": "Could not parse agent response."}
+        raw_label, confidence, reasoning = "UNRESOLVED", 0.0, "Could not parse agent response."
+
+    deferred = confidence < CONFIDENCE_THRESHOLD
+    final_label = "NEEDS_HUMAN_REVIEW" if deferred else raw_label
+
+    return {
+        "label": final_label,
+        "raw_label": raw_label,
+        "confidence": confidence,
+        "reasoning": reasoning,
+        "deferred": deferred,
+    }
 
 
 def _ground_truth_label(deterministic_type, has_matched):
@@ -120,6 +149,11 @@ def run_agent_verification(result):
     ground truth. Adds 'agent_label', 'agent_confidence', 'agent_reasoning',
     and 'agent_agrees' fields to each record in-place, and returns an
     overall agreement rate.
+
+    A deferred case (NEEDS_HUMAN_REVIEW) is never counted as "agrees" -
+    but it is tracked separately from a genuine wrong guess, since
+    deferring on an uncertain case is the correct, safe behavior, not
+    a mistake.
     """
     all_items = []
 
@@ -138,18 +172,29 @@ def run_agent_verification(result):
         all_items.append(e)
 
     agreements = 0
+    deferrals = 0
     for item in all_items:
         bank_rec = item.get("_bank_for_prompt", item.get("bank"))
         decision = classify_pair(item.get("internal"), bank_rec)
         item["agent_label"] = decision["label"]
+        item["agent_raw_label"] = decision["raw_label"]
         item["agent_confidence"] = decision["confidence"]
         item["agent_reasoning"] = decision["reasoning"]
+        item["agent_deferred"] = decision["deferred"]
         item["agent_agrees"] = (decision["label"] == item["_ground_truth"])
-        if item["agent_agrees"]:
+        if decision["deferred"]:
+            deferrals += 1
+        elif item["agent_agrees"]:
             agreements += 1
 
-    agreement_rate = round((agreements / len(all_items) * 100), 1) if all_items else 0.0
+    total = len(all_items)
+    auto_resolved = total - deferrals
+    agreement_rate = round((agreements / auto_resolved * 100), 1) if auto_resolved else 0.0
+    deferral_rate = round((deferrals / total * 100), 1) if total else 0.0
+
     result["agent_agreement_rate"] = agreement_rate
-    result["agent_total_reviewed"] = len(all_items)
+    result["agent_total_reviewed"] = total
     result["agent_agreements"] = agreements
+    result["agent_deferrals"] = deferrals
+    result["agent_deferral_rate"] = deferral_rate
     return result

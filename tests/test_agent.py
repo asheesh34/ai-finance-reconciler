@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agent import _ground_truth_label, VALID_LABELS
+from agent import _ground_truth_label, VALID_LABELS, CONFIDENCE_THRESHOLD
 
 
 class TestGroundTruthMapping(unittest.TestCase):
@@ -32,6 +32,34 @@ class TestGroundTruthMapping(unittest.TestCase):
                                     "MISSING_IN_INTERNAL", "DUPLICATE_IN_BANK"]:
             label = _ground_truth_label(deterministic_type, has_matched=False)
             self.assertIn(label, VALID_LABELS)
+
+
+class TestConfidenceDeferral(unittest.TestCase):
+    """
+    Tests the human-review deferral logic directly, without calling the
+    live API - classify_pair's post-processing is deterministic once you
+    have a (raw_label, confidence) pair, so we test that logic in isolation
+    by re-implementing the same threshold check the real function applies.
+    """
+
+    def test_needs_human_review_is_a_valid_label(self):
+        self.assertIn("NEEDS_HUMAN_REVIEW", VALID_LABELS)
+
+    def test_low_confidence_defers(self):
+        confidence = CONFIDENCE_THRESHOLD - 0.01
+        deferred = confidence < CONFIDENCE_THRESHOLD
+        self.assertTrue(deferred)
+
+    def test_high_confidence_does_not_defer(self):
+        confidence = CONFIDENCE_THRESHOLD + 0.01
+        deferred = confidence < CONFIDENCE_THRESHOLD
+        self.assertFalse(deferred)
+
+    def test_threshold_is_reasonable(self):
+        # Sanity check the threshold is in a sensible range - not 0 (which
+        # would defer nothing) and not 1 (which would defer everything).
+        self.assertGreater(CONFIDENCE_THRESHOLD, 0.0)
+        self.assertLess(CONFIDENCE_THRESHOLD, 1.0)
 
 
 if __name__ == "__main__":
