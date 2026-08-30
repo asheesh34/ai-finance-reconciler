@@ -20,9 +20,8 @@ Usage:
 import os
 import sys
 import tempfile
-import json
 
-from flask import Flask, request, render_template_string, send_file
+from flask import Flask, request, render_template_string
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
@@ -32,67 +31,175 @@ app = Flask(__name__)
 
 REQUIRED_COLUMNS = {"transaction_id", "date", "amount", "merchant"}
 
+BASE_STYLE = """
+  * { box-sizing: border-box; }
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+    color: #1B1F1C;
+    background: #EAF3EA;
+    background-image: repeating-linear-gradient(
+      to bottom, transparent, transparent 34px, #B9D6BE 35px
+    );
+    background-position: 0 100px;
+  }
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #1F4D36;
+    font-weight: 500;
+  }
+  h1 {
+    font-family: 'IBM Plex Serif', serif;
+    font-size: 32px;
+    font-weight: 600;
+    margin: 6px 0 2px;
+    color: #1B1F1C;
+  }
+  p.subtitle {
+    color: #3f4a43;
+    margin: 0 0 28px;
+    font-size: 15px;
+    max-width: 52ch;
+  }
+  .ledger-sheet {
+    background: #F7FBF6;
+    border: 1.5px solid #1F4D36;
+    border-radius: 3px;
+    padding: 8px 32px 32px;
+    position: relative;
+  }
+  .ledger-sheet::before {
+    content: "";
+    position: absolute;
+    left: 44px; top: 0; bottom: 0;
+    width: 1px;
+    background: #e0b3ae;
+  }
+  .entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 22px 0 20px 8px;
+    border-bottom: 1px solid #d4e6d6;
+  }
+  .entry:last-of-type { border-bottom: none; }
+  .entry-no {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: #1F4D36;
+    font-weight: 600;
+    padding-top: 4px;
+    width: 18px;
+  }
+  .entry-body { flex: 1; }
+  label {
+    display: block;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  input[type=file] {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px dashed #7fa789;
+    border-radius: 4px;
+    background: white;
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  input[type=file]:hover { border-color: #1F4D36; }
+  .hint {
+    font-family: 'IBM Plex Mono', monospace;
+    color: #5c6b60;
+    font-size: 11.5px;
+    margin-top: 7px;
+  }
+  button {
+    margin-top: 26px;
+    background: #1F4D36;
+    color: #EAF3EA;
+    border: none;
+    padding: 13px 26px;
+    border-radius: 4px;
+    font-size: 14.5px;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:hover { background: #163a28; }
+  .error {
+    background: #fdf1f0;
+    color: #B3261E;
+    border: 1px solid #eec6c3;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 13.5px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  a.sample, a.back {
+    font-size: 13px;
+    color: #1F4D36;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  a.sample:hover, a.back:hover { text-decoration: underline; }
+  .footer-hint { text-align: center; margin-top: 22px; color: #5c6b60; font-size: 13.5px; }
+"""
+
 UPLOAD_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>AI Finance Controller — Reconciliation</title>
+<title>Reconciliation Ledger</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 720px;
-         margin: 0 auto; padding: 60px 24px; color: #1a1a1a; background: #fafafa; }
-  .badge { display: inline-block; background: #eef6ff; color: #1959b8; font-size: 12px;
-           font-weight: 600; padding: 4px 10px; border-radius: 20px; letter-spacing: 0.3px;
-           text-transform: uppercase; margin-bottom: 14px; }
-  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.5px; }
-  p.subtitle { color: #666; margin: 0 0 8px; font-size: 15px; }
-  .card { background: white; border: 1px solid #e4e4e7; border-radius: 14px; padding: 32px;
-          margin-top: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-  label { display: block; font-weight: 600; margin-bottom: 8px; margin-top: 22px; font-size: 14px; }
-  label:first-of-type { margin-top: 0; }
-  input[type=file] { display: block; width: 100%; padding: 12px; border: 1.5px dashed #c7c7cc;
-                      border-radius: 8px; background: #fbfbfc; font-size: 14px; }
-  input[type=file]:hover { border-color: #1959b8; }
-  button { margin-top: 28px; background: #111827; color: white; border: none;
-           padding: 13px 24px; border-radius: 8px; font-size: 15px; font-weight: 600;
-           cursor: pointer; width: 100%; transition: background 0.15s; }
-  button:hover { background: #000; }
-  .hint { color: #999; font-size: 12.5px; margin-top: 6px; }
-  .error { background: #fef2f2; color: #b42318; padding: 14px 16px; border-radius: 8px;
-           margin-top: 20px; font-size: 14px; border: 1px solid #fecaca; }
-  a.sample { font-size: 13px; color: #1959b8; text-decoration: none; }
-  a.sample:hover { text-decoration: underline; }
-  .footer-hint { text-align: center; margin-top: 20px; color: #999; }
+""" + BASE_STYLE + """
 </style>
 </head>
 <body>
-  <span class="badge">Reconciliation Engine</span>
-  <h1>AI Finance Controller</h1>
-  <p class="subtitle">Upload two transaction datasets — see the match rate and every unresolved exception, honestly reported.</p>
+  <div class="eyebrow">Reconciliation Ledger</div>
+  <h1>Two records. One truth.</h1>
+  <p class="subtitle">Enter an internal record set and a bank statement below. Every line that doesn't tie out is reported, not hidden.</p>
 
   {% if error %}
-
   <div class="error">{{ error }}</div>
   {% endif %}
 
-  <div class="card">
+  <div class="ledger-sheet">
     <form method="POST" action="/reconcile" enctype="multipart/form-data">
-      <label>Internal records (CSV)</label>
-      <input type="file" name="internal_file" accept=".csv" required>
-      <p class="hint">Columns required: transaction_id, date, amount, merchant</p>
-
-      <label>Bank statement (CSV)</label>
-      <input type="file" name="bank_file" accept=".csv" required>
-      <p class="hint">Same column format as above.</p>
-
-      <button type="submit">Reconcile</button>
+      <div class="entry">
+        <div class="entry-no">01</div>
+        <div class="entry-body">
+          <label>Internal records</label>
+          <input type="file" name="internal_file" accept=".csv" required>
+          <p class="hint">transaction_id, date, amount, merchant</p>
+        </div>
+      </div>
+      <div class="entry">
+        <div class="entry-no">02</div>
+        <div class="entry-body">
+          <label>Bank statement</label>
+          <input type="file" name="bank_file" accept=".csv" required>
+          <p class="hint">same column format</p>
+        </div>
+      </div>
+      <button type="submit">Reconcile the ledger &rarr;</button>
     </form>
   </div>
 
   <p class="footer-hint">
-    No files handy? <a class="sample" href="/sample">Use the built-in sample data</a>
-    to see how it works.
+    No files handy? <a class="sample" href="/sample">Run the built-in sample</a>
   </p>
 </body>
 </html>
@@ -105,61 +212,120 @@ RESULTS_PAGE = """
 <title>Reconciliation Results</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 900px;
-         margin: 0 auto; padding: 50px 24px; color: #1a1a1a; background: #fafafa; }
-  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.5px; }
-  h3 { font-size: 16px; margin: 32px 0 8px; color: #333; }
-  .summary { display: flex; gap: 14px; margin: 26px 0; flex-wrap: wrap; }
-  .stat { background: white; border: 1px solid #e4e4e7; border-radius: 12px; padding: 20px 24px;
-          flex: 1; min-width: 140px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-  .stat .num { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
-  .stat .label { color: #777; font-size: 12.5px; margin-top: 4px; font-weight: 500; }
-  .stat.rate .num { color: #15803d; }
-  .stat.rate { border-color: #bbf7d0; background: #f0fdf4; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;
-          background: white; border-radius: 10px; overflow: hidden;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 1px solid #e4e4e7; }
-  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #eee; }
-  th { background: #f7f7f8; font-size: 12.5px; text-transform: uppercase; color: #666;
-       letter-spacing: 0.3px; font-weight: 600; }
+""" + BASE_STYLE + """
+  body { max-width: 920px; }
+  .headline { display: flex; align-items: center; gap: 28px; margin: 8px 0 30px; flex-wrap: wrap; }
+  .stamp {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: 1px;
+    color: #2F7D4F;
+    border: 3px double #2F7D4F;
+    padding: 10px 18px;
+    border-radius: 6px;
+    transform: rotate(-4deg);
+    display: inline-block;
+    white-space: nowrap;
+  }
+  .stamp.low { color: #B3261E; border-color: #B3261E; }
+  .stamp .stamp-label {
+    display: block;
+    font-size: 9.5px;
+    letter-spacing: 2px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    margin-top: 2px;
+    text-align: center;
+  }
+  .counts { font-family: 'IBM Plex Mono', monospace; font-size: 13.5px; color: #3f4a43; line-height: 1.9; }
+  .counts b { color: #1B1F1C; }
+  h3 {
+    font-family: 'IBM Plex Serif', serif;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 34px 0 10px;
+    color: #1F4D36;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    background: #F7FBF6;
+    border: 1px solid #cfe3d2;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #dcecdd; }
+  th {
+    font-family: 'Inter', sans-serif;
+    background: #E3F0E4;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #1F4D36;
+    font-weight: 600;
+  }
   tr:last-child td { border-bottom: none; }
-  .type-tag { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 12px;
-              font-weight: 600; background: #fef2f2; color: #b42318; }
-  .note { color: #888; font-size: 13px; margin: 20px 0 4px; padding: 14px 16px;
-          background: #f4f4f5; border-radius: 8px; }
-  a.back { display: inline-block; margin-top: 34px; color: #444; text-decoration: none;
-           font-size: 14px; font-weight: 500; }
-  a.back:hover { text-decoration: underline; }
-  .empty { color: #999; font-style: italic; font-size: 14px; }
+  td.amount { text-align: right; }
+  .type-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #fdf1f0;
+    color: #B3261E;
+    font-family: 'Inter', sans-serif;
+  }
+  .diff-neg { color: #B3261E; }
+  .diff-pos { color: #2F7D4F; }
+  .note {
+    color: #3f4a43;
+    font-size: 13px;
+    margin: 28px 0 4px;
+    padding: 14px 16px;
+    background: #F7FBF6;
+    border-left: 3px solid #1F4D36;
+    border-radius: 2px;
+  }
+  .empty { color: #6b7a70; font-style: italic; font-size: 13.5px; font-family: 'Inter', sans-serif; }
+"""
+
+RESULTS_PAGE += """
 </style>
 </head>
 <body>
-  <h1>Reconciliation Results</h1>
+  <div class="eyebrow">Reconciliation Ledger — Result</div>
+  <h1>The books, closed</h1>
 
-  <div class="summary">
-    <div class="stat rate"><div class="num">{{ result.match_rate }}%</div><div class="label">MATCH RATE</div></div>
-    <div class="stat"><div class="num">{{ result.matched|length }}</div><div class="label">MATCHED</div></div>
-    <div class="stat"><div class="num">{{ result.mismatched|length }}</div><div class="label">MISMATCHED</div></div>
-    <div class="stat"><div class="num">{{ result.exceptions|length }}</div><div class="label">EXCEPTIONS</div></div>
+  <div class="headline">
+    <div class="stamp {{ 'low' if result.match_rate < 60 else '' }}">
+      {{ result.match_rate }}% MATCHED
+      <span class="stamp-label">VERIFIED ON RECORD</span>
+    </div>
+    <div class="counts">
+      <b>{{ result.matched|length }}</b> matched &nbsp;·&nbsp;
+      <b>{{ result.mismatched|length }}</b> mismatched &nbsp;·&nbsp;
+      <b>{{ result.exceptions|length }}</b> exceptions
+    </div>
   </div>
 
   <h3>Mismatches</h3>
   {% if result.mismatched %}
   <table>
-    <tr><th>Transaction</th><th>Type</th><th>Internal amount</th><th>Bank amount</th><th>Difference</th></tr>
+    <tr><th>Transaction</th><th>Type</th><th class="amount">Internal</th><th class="amount">Bank</th><th class="amount">Difference</th></tr>
     {% for m in result.mismatched %}
     <tr>
       <td>{{ m.transaction_id }}</td>
       <td><span class="type-tag">{{ m.type }}</span></td>
-      <td>{{ m.internal.amount }}</td>
-      <td>{{ m.bank.amount }}</td>
-      <td>{{ m.difference }}</td>
+      <td class="amount">{{ m.internal.amount }}</td>
+      <td class="amount">{{ m.bank.amount }}</td>
+      <td class="amount {{ 'diff-neg' if m.difference < 0 else 'diff-pos' }}">{{ m.difference }}</td>
     </tr>
     {% endfor %}
   </table>
   {% else %}
-  <p class="empty">None.</p>
+  <p class="empty">None — every shared transaction ties out exactly.</p>
   {% endif %}
 
   <h3>Exceptions (could not be resolved automatically)</h3>
@@ -171,15 +337,14 @@ RESULTS_PAGE = """
     {% endfor %}
   </table>
   {% else %}
-  <p class="empty">None.</p>
+  <p class="empty">None — every transaction appears on both sides.</p>
   {% endif %}
 
   <p class="note">
-    This report does not force a match or hide failures — every unresolved
-    item above is left as-is for a human to review.
+    Nothing above is forced or hidden. Every unresolved entry is left exactly as found, for a human to close.
   </p>
 
-  <a class="back" href="/">&larr; Reconcile another pair of files</a>
+  <a class="back" href="/">&larr; Reconcile another pair</a>
 </body>
 </html>
 """
