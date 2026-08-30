@@ -7,9 +7,18 @@ This is a genuine held-out evaluation: the labels were not generated
 by the system being tested, so a high score here is a real accuracy
 claim, not the system grading itself.
 
-Reports overall accuracy plus per-label precision and recall, and
-prints every case the agent got wrong so the mistakes are visible,
-not just the summary number.
+A note on sample size: with 18 cases and several label categories
+represented by only 1-3 examples, per-label precision/recall here
+are indicative, not statistically robust - a single case flips a
+category from 0% to 100%. Treat these as a diagnostic signal, not
+a rigorous benchmark. Expanding eval_set.py with more cases per
+category is the natural next step (see README).
+
+Reports overall accuracy, a separate deferral rate (cases the agent
+declined to auto-resolve due to low confidence - correct, safe
+behavior, not a mistake), and per-label precision/recall. Every
+misclassified AND every deferred case is printed, so both kinds of
+non-answers are visible, not just the summary number.
 
 Usage:
     export AI_API_KEY=your_key_here
@@ -18,11 +27,10 @@ Usage:
 
 import os
 import sys
-from collections import defaultdict
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agent import classify_pair, VALID_LABELS
+from agent import classify_pair
 from eval_set import EVAL_CASES
 
 
@@ -40,11 +48,14 @@ def run_evaluation():
             continue
 
         predicted = decision["label"]
-        correct = predicted == case["true_label"]
+        deferred = decision["deferred"]
+        correct = (predicted == case["true_label"]) if not deferred else None
         results.append({
             "id": case["id"],
             "true_label": case["true_label"],
             "predicted_label": predicted,
+            "raw_label": decision["raw_label"],
+            "deferred": deferred,
             "correct": correct,
             "confidence": decision["confidence"],
             "reasoning": decision["reasoning"],
@@ -60,16 +71,24 @@ def run_evaluation():
 
 def compute_metrics(results):
     total = len(results)
-    correct = sum(1 for r in results if r["correct"])
-    accuracy = round(correct / total * 100, 1) if total else 0.0
+    deferred_results = [r for r in results if r["deferred"]]
+    auto_resolved = [r for r in results if not r["deferred"]]
 
-    # Per-label precision/recall
-    labels = sorted(set(r["true_label"] for r in results) | set(r["predicted_label"] for r in results))
+    correct = sum(1 for r in auto_resolved if r["correct"])
+    accuracy = round(correct / len(auto_resolved) * 100, 1) if auto_resolved else 0.0
+    deferral_rate = round(len(deferred_results) / total * 100, 1) if total else 0.0
+
+    # Per-label precision/recall - computed only over auto-resolved cases,
+    # since a deferred case has no predicted label to score.
+    labels = sorted(
+        set(r["true_label"] for r in results)
+        | set(r["predicted_label"] for r in auto_resolved)
+    )
     per_label = {}
 
     for label in labels:
-        true_positives = sum(1 for r in results if r["true_label"] == label and r["predicted_label"] == label)
-        predicted_positives = sum(1 for r in results if r["predicted_label"] == label)
+        true_positives = sum(1 for r in auto_resolved if r["true_label"] == label and r["predicted_label"] == label)
+        predicted_positives = sum(1 for r in auto_resolved if r["predicted_label"] == label)
         actual_positives = sum(1 for r in results if r["true_label"] == label)
 
         precision = round(true_positives / predicted_positives * 100, 1) if predicted_positives else None
@@ -84,6 +103,9 @@ def compute_metrics(results):
 
     return {
         "total": total,
+        "auto_resolved": len(auto_resolved),
+        "deferred": len(deferred_results),
+        "deferral_rate": deferral_rate,
         "correct": correct,
         "accuracy": accuracy,
         "per_label": per_label,
@@ -94,9 +116,14 @@ def print_report(results, metrics):
     print("=" * 64)
     print("  AGENT EVALUATION — hand-labeled ground truth")
     print("=" * 64)
-    print(f"Total cases: {metrics['total']}")
-    print(f"Correct:     {metrics['correct']}")
-    print(f"ACCURACY:    {metrics['accuracy']}%")
+    print(f"Total cases:         {metrics['total']}")
+    print(f"Deferred to human:   {metrics['deferred']}  ({metrics['deferral_rate']}%)")
+    print(f"Auto-resolved:       {metrics['auto_resolved']}")
+    print(f"Correct (of auto-resolved): {metrics['correct']}")
+    print(f"ACCURACY (auto-resolved only): {metrics['accuracy']}%")
+    print()
+    print("Note: sample size is small (n=18) with 1-3 examples per label -")
+    print("treat per-label numbers below as indicative, not statistically robust.")
     print()
     print("Per-label precision / recall (support = how many true cases of that label)")
     print("-" * 64)
@@ -105,17 +132,29 @@ def print_report(results, metrics):
         r = f"{m['recall']}%" if m["recall"] is not None else "n/a"
         print(f"  {label:<25} precision={p:<8} recall={r:<8} support={m['support']}")
 
-    wrong = [r for r in results if not r["correct"]]
+    wrong = [r for r in results if r["correct"] is False]
     if wrong:
         print()
-        print(f"MISCLASSIFIED ({len(wrong)} of {metrics['total']})")
+        print(f"MISCLASSIFIED ({len(wrong)} of {metrics['auto_resolved']} auto-resolved)")
         print("-" * 64)
         for r in wrong:
             print(f"[{r['id']}] true={r['true_label']}  agent said={r['predicted_label']} (confidence {r['confidence']})")
             print(f"  human reasoning: {r['human_note']}")
             print(f"  agent reasoning: {r['reasoning']}\n")
-    else:
-        print("\nNo misclassifications - every case matched human judgment.")
+
+    deferred = [r for r in results if r["deferred"]]
+    if deferred:
+        print()
+        print(f"DEFERRED TO HUMAN ({len(deferred)} of {metrics['total']}) — not counted as wrong")
+        print("-" * 64)
+        for r in deferred:
+            print(f"[{r['id']}] true={r['true_label']}  agent leaned toward={r['raw_label']} (confidence {r['confidence']})")
+            print(f"  human reasoning: {r['human_note']}")
+            print(f"  agent reasoning: {r['reasoning']}\n")
+
+    if not wrong and not deferred:
+        print("\nNo misclassifications or deferrals - every case both matched human")
+        print("judgment and was resolved with sufficient confidence.")
 
     print("=" * 64)
 
