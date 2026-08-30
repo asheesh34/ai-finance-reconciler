@@ -1,6 +1,10 @@
 # AI Finance Controller — Reconciliation Agent
 
 [![Tests](https://github.com/asheesh34/ai-finance-reconciler/actions/workflows/tests.yml/badge.svg)](https://github.com/asheesh34/ai-finance-reconciler/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+
+An AI agent that reconciles transaction records against bank statements — flags mismatches and unresolved exceptions with plain-English explanations instead of raw error codes.
 
 Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 
