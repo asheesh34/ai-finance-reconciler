@@ -37,29 +37,42 @@ UPLOAD_PAGE = """
 <html>
 <head>
 <title>AI Finance Controller — Reconciliation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 720px;
-         margin: 60px auto; padding: 0 20px; color: #1a1a1a; }
-  h1 { font-size: 28px; margin-bottom: 4px; }
-  p.subtitle { color: #666; margin-top: 0; }
-  .card { border: 1px solid #ddd; border-radius: 10px; padding: 28px; margin-top: 24px; }
-  label { display: block; font-weight: 600; margin-bottom: 6px; margin-top: 18px; }
-  input[type=file] { display: block; width: 100%; padding: 10px; border: 1px dashed #bbb;
-                      border-radius: 6px; }
-  button { margin-top: 24px; background: #1a1a1a; color: white; border: none;
-           padding: 12px 22px; border-radius: 6px; font-size: 15px; cursor: pointer; }
-  button:hover { background: #333; }
-  .hint { color: #888; font-size: 13px; margin-top: 6px; }
-  .error { background: #fdecea; color: #a12820; padding: 12px 16px; border-radius: 6px;
-           margin-top: 18px; }
-  a.sample { font-size: 13px; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 720px;
+         margin: 0 auto; padding: 60px 24px; color: #1a1a1a; background: #fafafa; }
+  .badge { display: inline-block; background: #eef6ff; color: #1959b8; font-size: 12px;
+           font-weight: 600; padding: 4px 10px; border-radius: 20px; letter-spacing: 0.3px;
+           text-transform: uppercase; margin-bottom: 14px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.5px; }
+  p.subtitle { color: #666; margin: 0 0 8px; font-size: 15px; }
+  .card { background: white; border: 1px solid #e4e4e7; border-radius: 14px; padding: 32px;
+          margin-top: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  label { display: block; font-weight: 600; margin-bottom: 8px; margin-top: 22px; font-size: 14px; }
+  label:first-of-type { margin-top: 0; }
+  input[type=file] { display: block; width: 100%; padding: 12px; border: 1.5px dashed #c7c7cc;
+                      border-radius: 8px; background: #fbfbfc; font-size: 14px; }
+  input[type=file]:hover { border-color: #1959b8; }
+  button { margin-top: 28px; background: #111827; color: white; border: none;
+           padding: 13px 24px; border-radius: 8px; font-size: 15px; font-weight: 600;
+           cursor: pointer; width: 100%; transition: background 0.15s; }
+  button:hover { background: #000; }
+  .hint { color: #999; font-size: 12.5px; margin-top: 6px; }
+  .error { background: #fef2f2; color: #b42318; padding: 14px 16px; border-radius: 8px;
+           margin-top: 20px; font-size: 14px; border: 1px solid #fecaca; }
+  a.sample { font-size: 13px; color: #1959b8; text-decoration: none; }
+  a.sample:hover { text-decoration: underline; }
+  .footer-hint { text-align: center; margin-top: 20px; color: #999; }
 </style>
 </head>
 <body>
+  <span class="badge">Reconciliation Engine</span>
   <h1>AI Finance Controller</h1>
-  <p class="subtitle">Upload two transaction CSVs to reconcile them.</p>
+  <p class="subtitle">Upload two transaction datasets — see the match rate and every unresolved exception, honestly reported.</p>
 
   {% if error %}
+
   <div class="error">{{ error }}</div>
   {% endif %}
 
@@ -77,7 +90,7 @@ UPLOAD_PAGE = """
     </form>
   </div>
 
-  <p class="hint">
+  <p class="footer-hint">
     No files handy? <a class="sample" href="/sample">Use the built-in sample data</a>
     to see how it works.
   </p>
@@ -90,33 +103,45 @@ RESULTS_PAGE = """
 <html>
 <head>
 <title>Reconciliation Results</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px;
-         margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
-  h1 { font-size: 26px; margin-bottom: 4px; }
-  .summary { display: flex; gap: 16px; margin: 24px 0; flex-wrap: wrap; }
-  .stat { border: 1px solid #ddd; border-radius: 10px; padding: 18px 24px; flex: 1; min-width: 140px; }
-  .stat .num { font-size: 28px; font-weight: 700; }
-  .stat .label { color: #666; font-size: 13px; margin-top: 4px; }
-  .stat.rate .num { color: #1a7a3d; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
-  th { background: #fafafa; }
-  .type-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px;
-              background: #fdecea; color: #a12820; }
-  .note { color: #666; font-size: 13px; margin: 4px 0 20px; }
-  a.back { display: inline-block; margin-top: 30px; color: #444; }
-  .empty { color: #888; font-style: italic; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 900px;
+         margin: 0 auto; padding: 50px 24px; color: #1a1a1a; background: #fafafa; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.5px; }
+  h3 { font-size: 16px; margin: 32px 0 8px; color: #333; }
+  .summary { display: flex; gap: 14px; margin: 26px 0; flex-wrap: wrap; }
+  .stat { background: white; border: 1px solid #e4e4e7; border-radius: 12px; padding: 20px 24px;
+          flex: 1; min-width: 140px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .stat .num { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
+  .stat .label { color: #777; font-size: 12.5px; margin-top: 4px; font-weight: 500; }
+  .stat.rate .num { color: #15803d; }
+  .stat.rate { border-color: #bbf7d0; background: #f0fdf4; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;
+          background: white; border-radius: 10px; overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 1px solid #e4e4e7; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #eee; }
+  th { background: #f7f7f8; font-size: 12.5px; text-transform: uppercase; color: #666;
+       letter-spacing: 0.3px; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .type-tag { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 12px;
+              font-weight: 600; background: #fef2f2; color: #b42318; }
+  .note { color: #888; font-size: 13px; margin: 20px 0 4px; padding: 14px 16px;
+          background: #f4f4f5; border-radius: 8px; }
+  a.back { display: inline-block; margin-top: 34px; color: #444; text-decoration: none;
+           font-size: 14px; font-weight: 500; }
+  a.back:hover { text-decoration: underline; }
+  .empty { color: #999; font-style: italic; font-size: 14px; }
 </style>
 </head>
 <body>
   <h1>Reconciliation Results</h1>
 
   <div class="summary">
-    <div class="stat rate"><div class="num">{{ result.match_rate }}%</div><div class="label">Match rate</div></div>
-    <div class="stat"><div class="num">{{ result.matched|length }}</div><div class="label">Matched</div></div>
-    <div class="stat"><div class="num">{{ result.mismatched|length }}</div><div class="label">Mismatched</div></div>
-    <div class="stat"><div class="num">{{ result.exceptions|length }}</div><div class="label">Exceptions</div></div>
+    <div class="stat rate"><div class="num">{{ result.match_rate }}%</div><div class="label">MATCH RATE</div></div>
+    <div class="stat"><div class="num">{{ result.matched|length }}</div><div class="label">MATCHED</div></div>
+    <div class="stat"><div class="num">{{ result.mismatched|length }}</div><div class="label">MISMATCHED</div></div>
+    <div class="stat"><div class="num">{{ result.exceptions|length }}</div><div class="label">EXCEPTIONS</div></div>
   </div>
 
   <h3>Mismatches</h3>
