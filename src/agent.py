@@ -81,21 +81,34 @@ Choose exactly one label from this list:
 - SETTLEMENT_DELAY: amount and merchant match, but the date differs by
   more than a trivial amount - flag it, but it is not an error
 - AMOUNT_MISMATCH: a small unexplained amount difference (likely a fee
-  or rounding issue)
+  or rounding issue) - this covers differences roughly under 10%
 - LIKELY_PARTIAL_REFUND: bank amount is meaningfully lower than internal
-  (10%+ lower), suggesting a partial refund rather than a fee
+  - roughly 10% or more lower - suggesting a partial refund rather than
+  a fee. Be careful near this boundary: a 2-5% difference is almost
+  always AMOUNT_MISMATCH (a fee), not a refund. Only choose
+  LIKELY_PARTIAL_REFUND when the gap is clearly large enough that a fee
+  explanation would be implausible.
 - MERCHANT_NAME_MISMATCH: amount and date match, but the merchant name
   looks meaningfully different (not just a formatting variant)
 - MISSING_IN_BANK: internal record exists, no corresponding bank record
 - MISSING_IN_INTERNAL: bank record exists, no corresponding internal record
 - DUPLICATE_IN_BANK: the same transaction appears more than once in the
   bank statement
-- UNRESOLVED: none of the above cleanly applies
+- UNRESOLVED: none of the above cleanly applies - use this when TWO OR
+  MORE things are wrong at once (e.g. both the date AND the amount are
+  off), since that combination needs a human to untangle rather than
+  being forced into one clean category
 
 Give an honest confidence score (0.0-1.0). If the case is genuinely
-ambiguous or multiple things look wrong at once, give a LOWER confidence
-rather than forcing a clean-sounding label - do not inflate confidence
-just to sound decisive.
+ambiguous, sits near a category boundary (like a difference close to
+the 10% refund cutoff), or has more than one thing wrong with it, give
+a LOWER confidence rather than forcing a clean-sounding label - do not
+inflate confidence just to sound decisive.
+
+The "reasoning" field must be your final, clean, one-sentence
+explanation only - never include intermediate deliberation, hedging
+words like "wait" or "actually", or a description of your own
+thought process.
 
 Respond with ONLY a JSON object, no other text, in this exact format:
 {{"label": "...", "confidence": 0.0, "reasoning": "one short sentence"}}"""
