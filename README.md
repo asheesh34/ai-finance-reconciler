@@ -95,6 +95,7 @@ UNRESOLVED EXCEPTIONS
 | `src/explain.py` | Calls a free-tier AI API to explain each mismatch/exception in plain English. |
 | `src/agent.py` | The agent layer — independently classifies each record pair and compares its judgment against verified ground truth. |
 | `src/report.py` | Combines the above into one final report (console output + `data/report.json`). |
+| `app.py` | A simple web interface — upload two CSVs in a browser and see the reconciliation results, no command line needed. |
 
 ## Running it
 
@@ -111,6 +112,21 @@ python3 src/report.py
 ```
 
 Output is printed to the console and saved to `data/report.json`.
+
+## Web interface
+
+For anyone who doesn't want to use the command line, `app.py` provides
+a simple browser-based version: upload two CSVs, click a button, see
+the results.
+
+```bash
+pip install -r requirements.txt
+python3 app.py
+```
+
+Then open `http://localhost:5000`. There's also a "use built-in sample
+data" link for a no-setup demo. Required CSV columns: `transaction_id`,
+`date`, `amount`, `merchant`.
 
 ## Using real data from RewindDB (optional)
 
