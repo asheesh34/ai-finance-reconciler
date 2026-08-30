@@ -26,6 +26,7 @@ from flask import Flask, request, render_template_string
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from reconcile import reconcile
+from agent import classify_pair, _ground_truth_label
 
 app = Flask(__name__)
 
@@ -289,6 +290,32 @@ RESULTS_PAGE = """
     border-radius: 2px;
   }
   .empty { color: #6b7a70; font-style: italic; font-size: 13.5px; font-family: 'Inter', sans-serif; }
+
+  .ai-banner {
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    color: #7a5c1f;
+    background: #FBF3E3;
+    border: 1px solid #e8d2a0;
+    border-left: 3px solid #A66A00;
+    padding: 12px 16px;
+    border-radius: 2px;
+    margin: 12px 0 4px;
+  }
+  .status-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.3px;
+  }
+  .status-auto { background: #eafaf0; color: #2F7D4F; }
+  .status-review { background: #FBF3E3; color: #A66A00; }
+  .status-disagree { background: #fdf1f0; color: #B3261E; }
+  .status-unavailable { background: #f1f1f2; color: #6b7a70; }
+  .ai-conf { font-family: 'IBM Plex Mono', monospace; color: #666; font-size: 12.5px; }
 """
 
 RESULTS_PAGE += """
@@ -340,6 +367,58 @@ RESULTS_PAGE += """
   <p class="empty">None — every transaction appears on both sides.</p>
   {% endif %}
 
+  <h3>AI Investigation</h3>
+  {% set ai_items = result.mismatched + result.exceptions %}
+  {% if not result.ai_available %}
+  <div class="ai-banner">
+    AI investigation unavailable — {{ result.ai_unavailable_reason or "no AI_API_KEY configured on the server." }}
+    The deterministic results above are unaffected and complete on their own.
+  </div>
+  {% elif not ai_items %}
+  <p class="empty">No mismatches or exceptions to investigate.</p>
+  {% else %}
+  <table>
+    <tr>
+      <th>Transaction</th>
+      <th>Deterministic type</th>
+      <th>AI assessment</th>
+      <th>Confidence</th>
+      <th>Status</th>
+    </tr>
+    {% for item in ai_items %}
+    <tr>
+      <td>{{ item.transaction_id }}</td>
+      <td><span class="type-tag">{{ item.type }}</span></td>
+      {% if item.ai_error %}
+      <td colspan="2"><span class="status-pill status-unavailable">AI UNAVAILABLE FOR THIS RECORD</span></td>
+      <td></td>
+      {% else %}
+      <td>{{ item.ai_raw_label }}{% if item.ai_deferred %} <span class="ai-conf">(leaning)</span>{% endif %}</td>
+      <td class="ai-conf">{{ "%.2f"|format(item.ai_confidence) }}</td>
+      <td>
+        {% if item.ai_deferred %}
+          <span class="status-pill status-review">NEEDS HUMAN REVIEW</span>
+        {% elif item.ai_disagrees %}
+          <span class="status-pill status-disagree">AI DISAGREES</span>
+        {% else %}
+          <span class="status-pill status-auto">AUTO-RESOLVED</span>
+        {% endif %}
+      </td>
+      {% endif %}
+    </tr>
+    {% if item.ai_reasoning %}
+    <tr><td></td><td colspan="4" style="color:#666; font-size:12.5px; padding-top:0;">{{ item.ai_reasoning }}</td></tr>
+    {% endif %}
+    {% endfor %}
+  </table>
+  <p class="note">
+    "AI disagrees" means the model's independent judgment differed from the
+    deterministic rules above — both are shown, neither is hidden or overwritten.
+    "Needs human review" means the model's own confidence was too low to
+    auto-resolve, regardless of which label it leaned toward.
+  </p>
+  {% endif %}
+
   <p class="note">
     Nothing above is forced or hidden. Every unresolved entry is left exactly as found, for a human to close.
   </p>
@@ -355,6 +434,71 @@ def _validate_csv_columns(path):
         header = f.readline().strip().split(",")
     missing = REQUIRED_COLUMNS - set(header)
     return missing
+
+
+def investigate_exceptions(result):
+    """
+    Runs the AI agent (classify_pair) on every mismatched and exception
+    record - never on matched records, to keep API calls and latency
+    proportional to actual problems, not the whole batch.
+
+    Sets result['ai_available'] and, on each investigated item, adds
+    ai_label / ai_raw_label / ai_confidence / ai_reasoning / ai_deferred /
+    ai_agrees / ai_disagrees / ai_error - kept as separate fields
+    alongside the existing deterministic 'type' field, never overwriting
+    it.
+
+    Fails safe: if AI_API_KEY is not set, or the very first real call
+    fails (signaling the API is unreachable, not just one bad record),
+    AI investigation is skipped entirely and the deterministic results
+    are returned unchanged with ai_available=False. If AI is reachable
+    but an individual record's call fails partway through, that one
+    record is marked ai_error and the rest continue normally - a
+    partial AI outage never discards reconciliation results.
+    """
+    items = result["mismatched"] + result["exceptions"]
+
+    if not os.environ.get("AI_API_KEY"):
+        result["ai_available"] = False
+        result["ai_unavailable_reason"] = "No AI_API_KEY configured on the server."
+        return result
+
+    if not items:
+        result["ai_available"] = True  # nothing to investigate, but AI is configured
+        return result
+
+    api_confirmed_working = False
+
+    for i, item in enumerate(items):
+        bank_rec = item["bank"][0] if item["type"] == "DUPLICATE_IN_BANK" and isinstance(item["bank"], list) else item.get("bank")
+
+        try:
+            decision = classify_pair(item.get("internal"), bank_rec)
+        except Exception:
+            item["ai_error"] = "AI investigation unavailable for this record."
+            if not api_confirmed_working:
+                # The very first attempt failed - treat this as the API
+                # being unreachable, not a one-off bad record, and stop
+                # trying further calls rather than retrying N more times.
+                result["ai_available"] = False
+                result["ai_unavailable_reason"] = "AI API was unreachable when investigation started."
+                for remaining in items[i + 1:]:
+                    remaining["ai_error"] = "AI investigation unavailable for this record."
+                return result
+            continue  # AI was working before; treat this as an isolated failure and keep going
+
+        api_confirmed_working = True
+        ground_truth = _ground_truth_label(item["type"], has_matched=False)
+        item["ai_label"] = decision["label"]
+        item["ai_raw_label"] = decision["raw_label"]
+        item["ai_confidence"] = decision["confidence"]
+        item["ai_reasoning"] = decision["reasoning"]
+        item["ai_deferred"] = decision["deferred"]
+        item["ai_agrees"] = (not decision["deferred"]) and (decision["label"] == ground_truth)
+        item["ai_disagrees"] = (not decision["deferred"]) and (decision["label"] != ground_truth)
+
+    result["ai_available"] = True
+    return result
 
 
 @app.route("/")
@@ -375,6 +519,7 @@ def sample():
         )
 
     result = reconcile(internal_path, bank_path)
+    result = investigate_exceptions(result)
     return render_template_string(RESULTS_PAGE, result=result)
 
 
@@ -407,6 +552,8 @@ def do_reconcile():
             result = reconcile(internal_path, bank_path)
         except Exception as e:
             return render_template_string(UPLOAD_PAGE, error=f"Could not process files: {e}")
+
+        result = investigate_exceptions(result)
 
     return render_template_string(RESULTS_PAGE, result=result)
 
