@@ -141,7 +141,8 @@ Output is printed to the console and saved to `data/report.json`.
 
 For anyone who doesn't want to use the command line, `app.py` provides
 a simple browser-based version: upload two CSVs, click a button, see
-the results.
+the full workflow in one page — deterministic match rate, then an AI
+investigation of every mismatch and exception.
 
 ```bash
 pip install -r requirements.txt
@@ -151,6 +152,15 @@ python3 app.py
 Then open `http://localhost:5000`. There's also a "use built-in sample
 data" link for a no-setup demo. Required CSV columns: `transaction_id`,
 `date`, `amount`, `merchant`.
+
+If `AI_API_KEY` is set, the AI investigation section runs automatically
+on every mismatch/exception (never on matches, keeping API calls
+proportional to actual problems) and shows each one's AI classification,
+confidence, and status — AUTO-RESOLVED, NEEDS HUMAN REVIEW, or AI
+DISAGREES with the deterministic result. If the key isn't set, or the
+API is unreachable, the page shows a clear banner and the deterministic
+results are displayed exactly the same either way — the web UI never
+depends on the AI layer to show reconciliation results.
 
 ## Using real data from RewindDB (optional)
 
