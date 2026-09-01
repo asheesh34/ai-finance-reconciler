@@ -13,33 +13,36 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 - **Deterministic match rate:** ~75-80% on 50+ synthetic transactions
   with deliberately injected errors (varies per run, since errors are
   randomly injected — see `data/report.json` after running).
-- **Agent accuracy: 75-85% on auto-resolved cases** across repeated runs
-  against a held-out, hand-labeled evaluation set of 18 transaction
+- **Agent accuracy: 85.0%** (17 of 20 correct, 0 deferred to human
+  review) on a held-out, hand-labeled evaluation set of 20 transaction
   pairs — where a human decided the correct answer directly, independent
-  of this project's own matching rules. The LLM is not deterministic, so
-  this is reported as a range from multiple runs (e.g. 83.3% and 77.8%
-  observed), not a single cherry-picked number. Full precision/recall
-  per label in `tests/eval_agent.py` output.
-  **Caveat:** n=18 with only 1-3 examples per label is a diagnostic
+  of this project's own matching rules. This result has been consistent
+  across repeated runs of the current build (agent.py commit `b617ec6`
+  and later — after the duplicate-visibility and boundary-consistency
+  fixes). Full precision/recall per label in `tests/eval_agent.py` output.
+  **Caveat:** n=20 with only 1-3 examples per label is a diagnostic
   sample, not a statistically robust benchmark — a single case flips
-  a category's precision/recall between 0% and 100%. Expanding this
-  set is the natural next step (see What's next).
+  a category's precision/recall between 0% and 100%. Per-category
+  metrics should be read as indicative, not proof. Expanding this
+  set further is the natural next step (see What's next).
 - **The agent supports confidence-based deferral to human review** —
   if its own stated confidence falls below `CONFIDENCE_THRESHOLD`
   (default 0.6, overridable via environment variable), it returns
   `NEEDS_HUMAN_REVIEW` instead of forcing a label. This default has
   **not been calibrated** against `eval_set.py` or any other validation
-  data — it is an unvalidated starting point, not a tuned value. In the
-  most recent evaluation run, the agent was confidently wrong on 4 of 18
-  cases (confidence 0.85-0.95) and deferred 0 times — meaning the
-  mechanism exists and is exercised by tests, but its effectiveness at
-  the current threshold has not yet been demonstrated on real mistakes.
-  This is disclosed rather than hidden; calibrating the threshold
-  against a larger evaluation set is on the roadmap.
-- The 3-4 misclassified cases across evaluation runs were defensible
-  edge cases (e.g. a 50-paisa difference called a mismatch instead of
-  rounding, or a 2% difference called a refund instead of a fee), not
-  random errors — every mistake is logged with the agent's reasoning
+  data — it is an unvalidated starting point, not a tuned value. Across
+  the repeated 20-case evaluation runs, the agent deferred 0 times,
+  including on the 3 cases it got wrong — meaning the deferral
+  mechanism exists and is exercised by tests (`tests/test_agent.py`),
+  but has not yet demonstrated catching a real mistake at the current
+  threshold. This is disclosed rather than hidden; calibrating the
+  threshold against a larger evaluation set is on the roadmap.
+- The 3 misclassified cases (out of 20) were defensible edge cases —
+  a 1-day settlement gap called a clean match instead of a flagged
+  delay, a 50-paisa difference called a mismatch instead of rounding,
+  and a case with two things wrong at once (date and amount both off)
+  called a partial refund instead of being deferred to a human — not
+  random errors. Every mistake is logged with the agent's reasoning
   alongside the human's original reasoning.
 - The internal-records side of the reconciliation is pulled from a
   real, running instance of [RewindDB](https://github.com/asheesh34/rewinddb-mini)
@@ -156,7 +159,7 @@ data" link for a no-setup demo. Required CSV columns: `transaction_id`,
 If `AI_API_KEY` is set, the AI investigation section runs automatically
 on every mismatch/exception (never on matches, keeping API calls
 proportional to actual problems) and shows each one's AI classification,
-confidence, and status — AUTO-RESOLVED, NEEDS HUMAN REVIEW, or AI
+confidence, and status — AI CONFIRMS, NEEDS HUMAN REVIEW, or AI
 DISAGREES with the deterministic result. If the key isn't set, or the
 API is unreachable, the page shows a clear banner and the deterministic
 results are displayed exactly the same either way — the web UI never
@@ -232,10 +235,10 @@ number.
   environment variable, unvalidated), the final label is overridden to
   `NEEDS_HUMAN_REVIEW` with the model's original lean preserved for the
   reviewer — this is tested end-to-end (`tests/test_agent.py`). What
-  isn't yet proven is that 0.6 is the right cutoff: a live run produced
-  4 confidently-wrong answers (0.85-0.95 confidence) and 0 deferrals.
-  The mechanism is real and exercised; its calibration is not yet
-  demonstrated.
+  isn't yet proven is that 0.6 is the right cutoff: across repeated
+  20-case evaluation runs, the agent has deferred 0 times, including on
+  the 3 cases it got wrong. The mechanism is real and exercised; its
+  calibration against real mistakes is not yet demonstrated.
 - **Tolerance for rounding, not for real mismatches.** A configurable
   tolerance (`AMOUNT_TOLERANCE` in `reconcile.py`) avoids flagging
   paise-level rounding as a false mismatch.
