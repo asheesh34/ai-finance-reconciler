@@ -355,7 +355,7 @@ RESULTS_PAGE += """
   <p class="empty">None — every shared transaction ties out exactly.</p>
   {% endif %}
 
-  <h3>Exceptions (could not be resolved automatically)</h3>
+  <h3>Exceptions (rules engine could not resolve automatically)</h3>
   {% if result.exceptions %}
   <table>
     <tr><th>Transaction</th><th>Type</th></tr>
@@ -401,7 +401,7 @@ RESULTS_PAGE += """
         {% elif item.ai_disagrees %}
           <span class="status-pill status-disagree">AI DISAGREES</span>
         {% else %}
-          <span class="status-pill status-auto">AUTO-RESOLVED</span>
+          <span class="status-pill status-auto">AI CONFIRMS</span>
         {% endif %}
       </td>
       {% endif %}
