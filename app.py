@@ -470,7 +470,12 @@ def investigate_exceptions(result):
     api_confirmed_working = False
 
     for i, item in enumerate(items):
-        bank_rec = item["bank"][0] if item["type"] == "DUPLICATE_IN_BANK" and isinstance(item["bank"], list) else item.get("bank")
+        # classify_pair now accepts a list of bank records natively (see
+        # agent.py's _describe_bank) and shows the model every duplicate
+        # entry, rather than only the first one - previously the model
+        # was structurally unable to detect a duplicate since it only
+        # ever saw one of the two entries.
+        bank_rec = item.get("bank")
 
         try:
             decision = classify_pair(item.get("internal"), bank_rec)
