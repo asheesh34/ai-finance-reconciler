@@ -82,10 +82,39 @@ def _record_str(label, record):
             f"amount={record.get('amount')} merchant={record.get('merchant')}")
 
 
+def _describe_bank(bank_record_or_list):
+    """
+    Formats the bank side of the comparison. bank_record_or_list may be
+    None, a single dict (the normal case), or a list of dicts - which
+    happens specifically for DUPLICATE_IN_BANK, where the same
+    transaction ID appears more than once in the bank statement.
+
+    When it's a list, every entry is shown explicitly, so the model can
+    see the duplication itself from the raw data. Previously only the
+    first entry was ever shown, which made it structurally impossible
+    for the model to recognize a duplicate - it was being asked to spot
+    something the data it received couldn't reveal.
+    """
+    if bank_record_or_list is None:
+        return "Bank record: (no record found)"
+    if isinstance(bank_record_or_list, list):
+        if len(bank_record_or_list) == 1:
+            return _record_str("Bank record", bank_record_or_list[0])
+        lines = [f"Bank records: {len(bank_record_or_list)} separate entries found in the "
+                 f"bank statement for this same transaction ID:"]
+        for i, rec in enumerate(bank_record_or_list, 1):
+            lines.append(f"  Entry {i}: date={rec.get('date')} amount={rec.get('amount')} merchant={rec.get('merchant')}")
+        return "\n".join(lines)
+    return _record_str("Bank record", bank_record_or_list)
+
+
 def classify_pair(internal_record, bank_record):
     """
     Asks the AI to independently classify a record pair (or a one-sided
     record, for missing/duplicate cases) and return a structured decision.
+
+    bank_record may be a single dict, None, or a list of dicts (for
+    DUPLICATE_IN_BANK - see _describe_bank).
 
     If the model's own confidence is below CONFIDENCE_THRESHOLD, the
     final label is overridden to NEEDS_HUMAN_REVIEW - the agent deferring
@@ -101,7 +130,7 @@ the correct classification. Do not assume a label has already been chosen -
 reason from the raw data.
 
 {_record_str("Internal record", internal_record)}
-{_record_str("Bank record", bank_record)}
+{_describe_bank(bank_record)}
 
 Choose exactly one label from this list:
 - MATCH: amount, merchant, and date are all consistent (allow a few days
@@ -120,26 +149,33 @@ Choose exactly one label from this list:
   looks meaningfully different (not just a formatting variant)
 - MISSING_IN_BANK: internal record exists, no corresponding bank record
 - MISSING_IN_INTERNAL: bank record exists, no corresponding internal record
-- DUPLICATE_IN_BANK: the same transaction appears more than once in the
-  bank statement
+- DUPLICATE_IN_BANK: more than one bank entry was shown above for this
+  same transaction ID
 - UNRESOLVED: none of the above cleanly applies - use this when TWO OR
   MORE things are wrong at once (e.g. both the date AND the amount are
   off), since that combination needs a human to untangle rather than
   being forced into one clean category
 
+If amounts differ, calculate the percentage difference first:
+abs(bank_amount - internal_amount) / internal_amount * 100. Your final
+label MUST be consistent with that calculation - if the percentage you
+calculate is 10% or higher, the label must be LIKELY_PARTIAL_REFUND, not
+AMOUNT_MISMATCH. Never state a percentage in your reasoning that
+contradicts the label you choose.
+
 Give an honest confidence score (0.0-1.0). If the case is genuinely
-ambiguous, sits near a category boundary (like a difference close to
-the 10% refund cutoff), or has more than one thing wrong with it, give
-a LOWER confidence rather than forcing a clean-sounding label - do not
-inflate confidence just to sound decisive.
+ambiguous, sits near a category boundary, or has more than one thing
+wrong with it, give a LOWER confidence rather than forcing a
+clean-sounding label - do not inflate confidence just to sound decisive.
 
 The "reasoning" field must be your final, clean, one-sentence
 explanation only - never include intermediate deliberation, hedging
 words like "wait" or "actually", or a description of your own
 thought process.
 
-Respond with ONLY a JSON object, no other text, in this exact format:
-{{"label": "...", "confidence": 0.0, "reasoning": "one short sentence"}}"""
+Respond with ONLY a JSON object, no other text. Write "reasoning" first
+so your label and confidence follow from it, in this exact format:
+{{"reasoning": "one short sentence, including your percentage calculation if amounts differ", "label": "...", "confidence": 0.0}}"""
 
     raw = call_llm(prompt, max_tokens=200)
 
@@ -208,15 +244,12 @@ def run_agent_verification(result):
 
     for e in result["exceptions"]:
         e["_ground_truth"] = _ground_truth_label(e["type"], has_matched=False)
-        # duplicates carry a list under 'bank' - use the first for the prompt
-        e["_bank_for_prompt"] = e["bank"][0] if e["type"] == "DUPLICATE_IN_BANK" and e["bank"] else e["bank"]
         all_items.append(e)
 
     agreements = 0
     deferrals = 0
     for item in all_items:
-        bank_rec = item.get("_bank_for_prompt", item.get("bank"))
-        decision = classify_pair(item.get("internal"), bank_rec)
+        decision = classify_pair(item.get("internal"), item.get("bank"))
         item["agent_label"] = decision["label"]
         item["agent_raw_label"] = decision["raw_label"]
         item["agent_confidence"] = decision["confidence"]
