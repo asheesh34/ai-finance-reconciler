@@ -122,7 +122,7 @@ def print_report(results, metrics):
     print(f"Correct (of auto-resolved): {metrics['correct']}")
     print(f"ACCURACY (auto-resolved only): {metrics['accuracy']}%")
     print()
-    print("Note: sample size is small (n=18) with 1-3 examples per label -")
+    print("Note: sample size is small (n=20) with 1-3 examples per label -")
     print("treat per-label numbers below as indicative, not statistically robust.")
     print()
     print("Per-label precision / recall (support = how many true cases of that label)")
