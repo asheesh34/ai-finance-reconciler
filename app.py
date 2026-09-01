@@ -32,176 +32,213 @@ app = Flask(__name__)
 
 REQUIRED_COLUMNS = {"transaction_id", "date", "amount", "merchant"}
 
+# Shared design tokens for the fintech dashboard look. A restrained,
+# professional palette: neutral light surface, navy/charcoal text,
+# blue as the single primary accent, green reserved strictly for
+# deterministic "matched" signals, amber for exceptions/attention,
+# red reserved for the strongest disagreement signal (AI actively
+# contradicting the deterministic result).
 BASE_STYLE = """
+  :root {
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --border: #E2E8F0;
+    --border-strong: #CBD5E1;
+    --text: #0F172A;
+    --text-secondary: #475569;
+    --text-tertiary: #94A3B8;
+    --blue: #2563EB;
+    --blue-bg: #EFF6FF;
+    --blue-border: #BFDBFE;
+    --green: #16A34A;
+    --green-bg: #F0FDF4;
+    --green-border: #BBF7D0;
+    --amber: #B45309;
+    --amber-bg: #FFFBEB;
+    --amber-border: #FDE68A;
+    --red: #DC2626;
+    --red-bg: #FEF2F2;
+    --red-border: #FECACA;
+    --gray-bg: #F1F5F9;
+  }
   * { box-sizing: border-box; }
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
+  html { -webkit-font-smoothing: antialiased; }
   body {
-    font-family: 'Inter', -apple-system, sans-serif;
-    max-width: 760px;
+    font-family: 'Inter', -apple-system, "Segoe UI", sans-serif;
+    max-width: 880px;
     margin: 0 auto;
-    padding: 56px 24px 80px;
-    color: #1B1F1C;
-    background: #EAF3EA;
-    background-image: repeating-linear-gradient(
-      to bottom, transparent, transparent 34px, #B9D6BE 35px
-    );
-    background-position: 0 100px;
+    padding: 40px 24px 72px;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.5;
   }
-  .eyebrow {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: #1F4D36;
-    font-weight: 500;
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  /* --- Product identity header, shared --- */
+  .product-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+  .product-mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--text);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13px;
+    flex-shrink: 0;
   }
+  .product-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .product-tag {
+    font-size: 11px; font-weight: 600; color: var(--blue);
+    background: var(--blue-bg); border: 1px solid var(--blue-border);
+    padding: 2px 8px; border-radius: 20px; letter-spacing: 0.2px;
+    margin-left: 2px;
+  }
+
   h1 {
-    font-family: 'IBM Plex Serif', serif;
-    font-size: 32px;
-    font-weight: 600;
-    margin: 6px 0 2px;
-    color: #1B1F1C;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin: 0 0 6px;
+    color: var(--text);
   }
   p.subtitle {
-    color: #3f4a43;
-    margin: 0 0 28px;
-    font-size: 15px;
-    max-width: 52ch;
+    color: var(--text-secondary);
+    margin: 0 0 30px;
+    font-size: 14.5px;
+    max-width: 58ch;
   }
-  .ledger-sheet {
-    background: #F7FBF6;
-    border: 1.5px solid #1F4D36;
-    border-radius: 3px;
-    padding: 8px 32px 32px;
-    position: relative;
+
+  /* --- Cards, shared --- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   }
-  .ledger-sheet::before {
-    content: "";
-    position: absolute;
-    left: 44px; top: 0; bottom: 0;
-    width: 1px;
-    background: #e0b3ae;
+
+  /* --- Upload form --- */
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px; }
+  @media (max-width: 620px) { .upload-grid { grid-template-columns: 1fr; } }
+  .upload-field {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 16px 18px;
   }
-  .entry {
-    display: flex;
-    align-items: flex-start;
-    gap: 20px;
-    padding: 22px 0 20px 8px;
-    border-bottom: 1px solid #d4e6d6;
-  }
-  .entry:last-of-type { border-bottom: none; }
-  .entry-no {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 13px;
-    color: #1F4D36;
-    font-weight: 600;
-    padding-top: 4px;
-    width: 18px;
-  }
-  .entry-body { flex: 1; }
-  label {
-    display: block;
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 8px;
-  }
+  .upload-field-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .upload-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .upload-dot.internal { background: var(--blue); }
+  .upload-dot.bank { background: var(--text-tertiary); }
+  .upload-field label { font-weight: 600; font-size: 13.5px; color: var(--text); }
   input[type=file] {
     display: block;
     width: 100%;
-    padding: 10px 12px;
-    border: 1.5px dashed #7fa789;
-    border-radius: 4px;
-    background: white;
-    font-size: 13px;
-    font-family: 'IBM Plex Mono', monospace;
+    padding: 9px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--gray-bg);
+    font-size: 12.5px;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-secondary);
   }
-  input[type=file]:hover { border-color: #1F4D36; }
-  .hint {
+  input[type=file]:hover { border-color: var(--blue); }
+  .field-hint {
     font-family: 'IBM Plex Mono', monospace;
-    color: #5c6b60;
-    font-size: 11.5px;
+    color: var(--text-tertiary);
+    font-size: 11px;
     margin-top: 7px;
   }
+  .upload-actions { padding: 4px 20px 20px; }
   button {
-    margin-top: 26px;
-    background: #1F4D36;
-    color: #EAF3EA;
+    background: var(--text);
+    color: white;
     border: none;
-    padding: 13px 26px;
-    border-radius: 4px;
-    font-size: 14.5px;
+    padding: 11px 22px;
+    border-radius: 7px;
+    font-size: 14px;
     font-weight: 600;
-    font-family: 'IBM Plex Mono', monospace;
-    letter-spacing: 0.4px;
+    font-family: 'Inter', sans-serif;
     cursor: pointer;
     width: 100%;
+    transition: background 0.12s ease;
   }
-  button:hover { background: #163a28; }
-  .error {
-    background: #fdf1f0;
-    color: #B3261E;
-    border: 1px solid #eec6c3;
+  button:hover { background: #1e293b; }
+  button:disabled { background: var(--text-tertiary); cursor: not-allowed; }
+
+  .notice {
     padding: 12px 16px;
-    border-radius: 4px;
-    margin-bottom: 20px;
-    font-size: 13.5px;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-  a.sample, a.back {
+    border-radius: 8px;
     font-size: 13px;
-    color: #1F4D36;
-    text-decoration: none;
-    font-weight: 500;
+    margin-bottom: 18px;
+    border: 1px solid;
   }
-  a.sample:hover, a.back:hover { text-decoration: underline; }
-  .footer-hint { text-align: center; margin-top: 22px; color: #5c6b60; font-size: 13.5px; }
+  .notice.error { background: var(--red-bg); border-color: var(--red-border); color: var(--red); }
+  .notice.info { background: var(--blue-bg); border-color: var(--blue-border); color: #1D4ED8; }
+
+  a.link { font-size: 13px; color: var(--blue); text-decoration: none; font-weight: 500; }
+  a.link:hover { text-decoration: underline; }
+  .footer-hint { text-align: center; margin-top: 18px; color: var(--text-tertiary); font-size: 13px; }
 """
 
 UPLOAD_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Reconciliation Ledger</title>
+<title>AI Finance Controller — Reconciliation</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 """ + BASE_STYLE + """
 </style>
 </head>
 <body>
-  <div class="eyebrow">Reconciliation Ledger</div>
-  <h1>Two records. One truth.</h1>
-  <p class="subtitle">Enter an internal record set and a bank statement below. Every line that doesn't tie out is reported, not hidden.</p>
+  <div class="product-bar">
+    <div class="product-mark">FC</div>
+    <div class="product-name">AI Finance Controller</div>
+    <div class="product-tag">RECONCILIATION</div>
+  </div>
+
+  <h1>Reconcile two transaction sets</h1>
+  <p class="subtitle">Upload your internal records and a bank statement. Every line that doesn't tie out is reported, with an AI second opinion on each exception — not hidden or auto-closed.</p>
 
   {% if error %}
-  <div class="error">{{ error }}</div>
+  <div class="notice error">{{ error }}</div>
   {% endif %}
 
-  <div class="ledger-sheet">
-    <form method="POST" action="/reconcile" enctype="multipart/form-data">
-      <div class="entry">
-        <div class="entry-no">01</div>
-        <div class="entry-body">
-          <label>Internal records</label>
+  <div class="card">
+    <form id="reconcile-form" method="POST" action="/reconcile" enctype="multipart/form-data">
+      <div class="upload-grid">
+        <div class="upload-field">
+          <div class="upload-field-head">
+            <span class="upload-dot internal"></span>
+            <label>Internal transactions</label>
+          </div>
           <input type="file" name="internal_file" accept=".csv" required>
-          <p class="hint">transaction_id, date, amount, merchant</p>
+          <p class="field-hint">transaction_id, date, amount, merchant</p>
         </div>
-      </div>
-      <div class="entry">
-        <div class="entry-no">02</div>
-        <div class="entry-body">
-          <label>Bank statement</label>
+        <div class="upload-field">
+          <div class="upload-field-head">
+            <span class="upload-dot bank"></span>
+            <label>Bank / settlement records</label>
+          </div>
           <input type="file" name="bank_file" accept=".csv" required>
-          <p class="hint">same column format</p>
+          <p class="field-hint">same column format</p>
         </div>
       </div>
-      <button type="submit">Reconcile the ledger &rarr;</button>
+      <div class="upload-actions">
+        <button type="submit" id="reconcile-btn">Run reconciliation</button>
+      </div>
     </form>
   </div>
 
   <p class="footer-hint">
-    No files handy? <a class="sample" href="/sample">Run the built-in sample</a>
+    No files handy? <a class="link" href="/sample">Run the built-in sample dataset</a>
   </p>
+
+  <script>
+    document.getElementById('reconcile-form').addEventListener('submit', function() {
+      var btn = document.getElementById('reconcile-btn');
+      btn.disabled = true;
+      btn.textContent = 'Reconciling — this can take a minute if AI investigation runs…';
+    });
+  </script>
 </body>
 </html>
 """
@@ -214,137 +251,144 @@ RESULTS_PAGE = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 """ + BASE_STYLE + """
-  body { max-width: 920px; }
-  .headline { display: flex; align-items: center; gap: 28px; margin: 8px 0 30px; flex-wrap: wrap; }
-  .stamp {
-    font-family: 'IBM Plex Mono', monospace;
-    font-weight: 600;
-    font-size: 22px;
-    letter-spacing: 1px;
-    color: #2F7D4F;
-    border: 3px double #2F7D4F;
-    padding: 10px 18px;
-    border-radius: 6px;
-    transform: rotate(-4deg);
-    display: inline-block;
-    white-space: nowrap;
+  body { max-width: 980px; }
+
+  /* --- Metrics row --- */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 4px 0 32px; }
+  @media (max-width: 720px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   }
-  .stamp.low { color: #B3261E; border-color: #B3261E; }
-  .stamp .stamp-label {
-    display: block;
-    font-size: 9.5px;
-    letter-spacing: 2px;
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    margin-top: 2px;
-    text-align: center;
+  .metric-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
+    color: var(--text-tertiary); margin-bottom: 6px;
   }
-  .counts { font-family: 'IBM Plex Mono', monospace; font-size: 13.5px; color: #3f4a43; line-height: 1.9; }
-  .counts b { color: #1B1F1C; }
-  h3 {
-    font-family: 'IBM Plex Serif', serif;
-    font-size: 16px;
-    font-weight: 600;
-    margin: 34px 0 10px;
-    color: #1F4D36;
+  .metric-value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); }
+  .metric.rate .metric-value { color: var(--green); }
+  .metric.rate.mid .metric-value { color: var(--amber); }
+  .metric.rate.low .metric-value { color: var(--red); }
+  .rate-bar { height: 5px; background: var(--gray-bg); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .rate-bar-fill { height: 100%; background: var(--green); border-radius: 3px; }
+  .rate-bar-fill.mid { background: var(--amber); }
+  .rate-bar-fill.low { background: var(--red); }
+
+  h2 {
+    font-size: 15px; font-weight: 700; color: var(--text);
+    margin: 34px 0 4px; letter-spacing: -0.1px;
   }
+  p.section-sub { color: var(--text-tertiary); font-size: 12.5px; margin: 0 0 12px; }
+
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13.5px;
-    background: #F7FBF6;
-    border: 1px solid #cfe3d2;
-    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
   }
-  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #dcecdd; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
   th {
-    font-family: 'Inter', sans-serif;
-    background: #E3F0E4;
-    font-size: 11px;
+    font-size: 10.5px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #1F4D36;
+    letter-spacing: 0.4px;
+    color: var(--text-tertiary);
     font-weight: 600;
+    background: var(--gray-bg);
   }
   tr:last-child td { border-bottom: none; }
-  td.amount { text-align: right; }
-  .type-tag {
+  tr:hover td { background: #FAFBFC; }
+  td.amount, th.amount { text-align: right; }
+  td.mono, td.amount { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  .badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 3px;
-    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 10.5px;
     font-weight: 600;
-    background: #fdf1f0;
-    color: #B3261E;
-    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.2px;
+    border: 1px solid;
+    white-space: nowrap;
   }
-  .diff-neg { color: #B3261E; }
-  .diff-pos { color: #2F7D4F; }
+  .badge.exception { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-border); }
+  .badge.confirms { background: var(--blue-bg); color: #1D4ED8; border-color: var(--blue-border); }
+  .badge.disagrees { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
+  .badge.review { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-border); }
+  .badge.unavailable { background: var(--gray-bg); color: var(--text-tertiary); border-color: var(--border); }
+
+  .diff-neg { color: var(--red); }
+  .diff-pos { color: var(--green); }
+
+  .ai-section-head {
+    display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    margin: 34px 0 4px;
+  }
+  .ai-disclaimer {
+    font-size: 12px; color: var(--text-tertiary); font-style: italic;
+  }
+  .reasoning-row td { color: var(--text-secondary); font-size: 12px; padding-top: 0; border-bottom: 1px solid var(--border); }
+  .reasoning-row:last-child td { border-bottom: none; }
+
   .note {
-    color: #3f4a43;
+    color: var(--text-secondary);
     font-size: 13px;
-    margin: 28px 0 4px;
-    padding: 14px 16px;
-    background: #F7FBF6;
-    border-left: 3px solid #1F4D36;
-    border-radius: 2px;
-  }
-  .empty { color: #6b7a70; font-style: italic; font-size: 13.5px; font-family: 'Inter', sans-serif; }
-
-  .ai-banner {
-    font-family: 'Inter', sans-serif;
-    font-size: 13.5px;
-    color: #7a5c1f;
-    background: #FBF3E3;
-    border: 1px solid #e8d2a0;
-    border-left: 3px solid #A66A00;
+    margin: 22px 0 4px;
     padding: 12px 16px;
+    background: var(--gray-bg);
+    border-left: 3px solid var(--text-tertiary);
     border-radius: 2px;
-    margin: 12px 0 4px;
   }
-  .status-pill {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: 600;
-    font-family: 'Inter', sans-serif;
-    letter-spacing: 0.3px;
-  }
-  .status-auto { background: #eafaf0; color: #2F7D4F; }
-  .status-review { background: #FBF3E3; color: #A66A00; }
-  .status-disagree { background: #fdf1f0; color: #B3261E; }
-  .status-unavailable { background: #f1f1f2; color: #6b7a70; }
-  .ai-conf { font-family: 'IBM Plex Mono', monospace; color: #666; font-size: 12.5px; }
-"""
-
-RESULTS_PAGE += """
+  .empty { color: var(--text-tertiary); font-style: italic; font-size: 13px; }
+  a.back { display: inline-block; margin-top: 30px; }
+""" + """
 </style>
 </head>
 <body>
-  <div class="eyebrow">Reconciliation Ledger — Result</div>
-  <h1>The books, closed</h1>
+  <div class="product-bar">
+    <div class="product-mark">FC</div>
+    <div class="product-name">AI Finance Controller</div>
+    <div class="product-tag">RECONCILIATION</div>
+  </div>
 
-  <div class="headline">
-    <div class="stamp {{ 'low' if result.match_rate < 60 else '' }}">
-      {{ result.match_rate }}% MATCHED
-      <span class="stamp-label">VERIFIED ON RECORD</span>
+  <h1>Reconciliation results</h1>
+  <p class="subtitle">Deterministic engine results below are the source of truth. The AI Investigation section is a second opinion on each exception — it never alters these numbers.</p>
+
+  {% set total = result.matched|length + result.mismatched|length + result.exceptions|length %}
+  {% set rate_class = 'low' if result.match_rate < 60 else ('mid' if result.match_rate < 80 else '') %}
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Records</div>
+      <div class="metric-value mono">{{ total }}</div>
     </div>
-    <div class="counts">
-      <b>{{ result.matched|length }}</b> matched &nbsp;·&nbsp;
-      <b>{{ result.mismatched|length }}</b> mismatched &nbsp;·&nbsp;
-      <b>{{ result.exceptions|length }}</b> exceptions
+    <div class="metric">
+      <div class="metric-label">Matched</div>
+      <div class="metric-value mono">{{ result.matched|length }}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Exceptions</div>
+      <div class="metric-value mono">{{ result.mismatched|length + result.exceptions|length }}</div>
+    </div>
+    <div class="metric rate {{ rate_class }}">
+      <div class="metric-label">Match rate</div>
+      <div class="metric-value mono">{{ result.match_rate }}%</div>
+      <div class="rate-bar"><div class="rate-bar-fill {{ rate_class }}" style="width: {{ result.match_rate }}%;"></div></div>
     </div>
   </div>
 
-  <h3>Mismatches</h3>
+  <h2>Mismatches</h2>
+  <p class="section-sub">Same transaction ID on both sides, but a field doesn't line up.</p>
   {% if result.mismatched %}
   <table>
     <tr><th>Transaction</th><th>Type</th><th class="amount">Internal</th><th class="amount">Bank</th><th class="amount">Difference</th></tr>
     {% for m in result.mismatched %}
     <tr>
-      <td>{{ m.transaction_id }}</td>
-      <td><span class="type-tag">{{ m.type }}</span></td>
+      <td class="mono">{{ m.transaction_id }}</td>
+      <td><span class="badge exception">{{ m.type }}</span></td>
       <td class="amount">{{ m.internal.amount }}</td>
       <td class="amount">{{ m.bank.amount }}</td>
       <td class="amount {{ 'diff-neg' if m.difference < 0 else 'diff-pos' }}">{{ m.difference }}</td>
@@ -355,22 +399,27 @@ RESULTS_PAGE += """
   <p class="empty">None — every shared transaction ties out exactly.</p>
   {% endif %}
 
-  <h3>Exceptions (rules engine could not resolve automatically)</h3>
+  <h2>Exceptions</h2>
+  <p class="section-sub">The deterministic rules engine could not resolve these automatically.</p>
   {% if result.exceptions %}
   <table>
     <tr><th>Transaction</th><th>Type</th></tr>
     {% for e in result.exceptions %}
-    <tr><td>{{ e.transaction_id }}</td><td><span class="type-tag">{{ e.type }}</span></td></tr>
+    <tr><td class="mono">{{ e.transaction_id }}</td><td><span class="badge exception">{{ e.type }}</span></td></tr>
     {% endfor %}
   </table>
   {% else %}
   <p class="empty">None — every transaction appears on both sides.</p>
   {% endif %}
 
-  <h3>AI Investigation</h3>
   {% set ai_items = result.mismatched + result.exceptions %}
+  <div class="ai-section-head">
+    <h2 style="margin: 0;">AI Investigation</h2>
+    <span class="ai-disclaimer">Second opinion on exceptions above — not the source of truth</span>
+  </div>
+
   {% if not result.ai_available %}
-  <div class="ai-banner">
+  <div class="notice info">
     AI investigation unavailable — {{ result.ai_unavailable_reason or "no AI_API_KEY configured on the server." }}
     The deterministic results above are unaffected and complete on their own.
   </div>
@@ -387,35 +436,34 @@ RESULTS_PAGE += """
     </tr>
     {% for item in ai_items %}
     <tr>
-      <td>{{ item.transaction_id }}</td>
-      <td><span class="type-tag">{{ item.type }}</span></td>
+      <td class="mono">{{ item.transaction_id }}</td>
+      <td><span class="badge exception">{{ item.type }}</span></td>
       {% if item.ai_error %}
-      <td colspan="2"><span class="status-pill status-unavailable">AI UNAVAILABLE FOR THIS RECORD</span></td>
+      <td colspan="2"><span class="badge unavailable">AI UNAVAILABLE FOR THIS RECORD</span></td>
       <td></td>
       {% else %}
-      <td>{{ item.ai_raw_label }}{% if item.ai_deferred %} <span class="ai-conf">(leaning)</span>{% endif %}</td>
-      <td class="ai-conf">{{ "%.2f"|format(item.ai_confidence) }}</td>
+      <td class="mono">{{ item.ai_raw_label }}{% if item.ai_deferred %} <span style="color:var(--text-tertiary);">(leaning)</span>{% endif %}</td>
+      <td class="mono">{{ "%.2f"|format(item.ai_confidence) }}</td>
       <td>
         {% if item.ai_deferred %}
-          <span class="status-pill status-review">NEEDS HUMAN REVIEW</span>
+          <span class="badge review">NEEDS HUMAN REVIEW</span>
         {% elif item.ai_disagrees %}
-          <span class="status-pill status-disagree">AI DISAGREES</span>
+          <span class="badge disagrees">AI DISAGREES</span>
         {% else %}
-          <span class="status-pill status-auto">AI CONFIRMS</span>
+          <span class="badge confirms">AI CONFIRMS</span>
         {% endif %}
       </td>
       {% endif %}
     </tr>
     {% if item.ai_reasoning %}
-    <tr><td></td><td colspan="4" style="color:#666; font-size:12.5px; padding-top:0;">{{ item.ai_reasoning }}</td></tr>
+    <tr class="reasoning-row"><td></td><td colspan="4">{{ item.ai_reasoning }}</td></tr>
     {% endif %}
     {% endfor %}
   </table>
   <p class="note">
-    "AI disagrees" means the model's independent judgment differed from the
-    deterministic rules above — both are shown, neither is hidden or overwritten.
-    "Needs human review" means the model's own confidence was too low to
-    auto-resolve, regardless of which label it leaned toward.
+    <strong>AI CONFIRMS</strong> — the model's independent read agrees with the rules engine.
+    <strong>AI DISAGREES</strong> — the model's independent read differs; both are shown, neither is hidden or overwritten.
+    <strong>NEEDS HUMAN REVIEW</strong> — the model's own confidence was too low to trust either way.
   </p>
   {% endif %}
 
@@ -423,12 +471,10 @@ RESULTS_PAGE += """
     Nothing above is forced or hidden. Every unresolved entry is left exactly as found, for a human to close.
   </p>
 
-  <a class="back" href="/">&larr; Reconcile another pair</a>
+  <a class="link back" href="/">&larr; Reconcile another pair</a>
 </body>
 </html>
 """
-
-
 def _validate_csv_columns(path):
     with open(path, newline="") as f:
         header = f.readline().strip().split(",")
