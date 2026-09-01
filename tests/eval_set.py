@@ -150,4 +150,29 @@ EVAL_CASES = [
         "true_label": "MATCH",
         "human_note": "'BigTree Ent' is BookMyShow's known parent company billing name - same merchant, amount and date match.",
     },
+
+    # --- Duplicate bank entries (2 cases) ---
+    # Added after a live browser test revealed the AI could not detect
+    # duplicates when only shown one of the two bank entries - this
+    # category previously had zero coverage in this evaluation set.
+    {
+        "id": "EVAL19",
+        "internal": {"transaction_id": "EVAL19", "date": "2026-08-22", "amount": "850.00", "merchant": "Ola"},
+        "bank": [
+            {"transaction_id": "EVAL19", "date": "2026-08-22", "amount": "850.00", "merchant": "Ola"},
+            {"transaction_id": "EVAL19", "date": "2026-08-22", "amount": "850.00", "merchant": "Ola"},
+        ],
+        "true_label": "DUPLICATE_IN_BANK",
+        "human_note": "The exact same transaction appears twice in the bank statement - a duplicate settlement, not a match.",
+    },
+    {
+        "id": "EVAL20",
+        "internal": {"transaction_id": "EVAL20", "date": "2026-08-23", "amount": "2340.00", "merchant": "Flipkart"},
+        "bank": [
+            {"transaction_id": "EVAL20", "date": "2026-08-23", "amount": "2340.00", "merchant": "Flipkart"},
+            {"transaction_id": "EVAL20", "date": "2026-08-23", "amount": "2340.00", "merchant": "Flipkart"},
+        ],
+        "true_label": "DUPLICATE_IN_BANK",
+        "human_note": "Two identical bank entries for the same transaction ID - likely a retry artifact that double-charged the customer.",
+    },
 ]
