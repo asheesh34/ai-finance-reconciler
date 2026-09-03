@@ -177,20 +177,38 @@ Respond with ONLY a JSON object, no other text. Write "reasoning" first
 so your label and confidence follow from it, in this exact format:
 {{"reasoning": "one short sentence, including your percentage calculation if amounts differ", "label": "...", "confidence": 0.0}}"""
 
-    raw = call_llm(prompt, max_tokens=200)
+    raw = call_llm(prompt, max_tokens=600)
 
     # Be defensive - strip markdown fences if the model adds them anyway
     raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
 
+    def _try_parse(text):
+        parsed = json.loads(text)
+        label = parsed.get("label", "UNRESOLVED")
+        if label not in VALID_LABELS or label == "NEEDS_HUMAN_REVIEW":
+            label = "UNRESOLVED"  # NEEDS_HUMAN_REVIEW is never the model's own choice
+        conf = float(parsed.get("confidence", 0.0))
+        reason = parsed.get("reasoning", "")
+        return label, conf, reason
+
     try:
-        parsed = json.loads(raw)
-        raw_label = parsed.get("label", "UNRESOLVED")
-        if raw_label not in VALID_LABELS or raw_label == "NEEDS_HUMAN_REVIEW":
-            raw_label = "UNRESOLVED"  # NEEDS_HUMAN_REVIEW is never the model's own choice
-        confidence = float(parsed.get("confidence", 0.0))
-        reasoning = parsed.get("reasoning", "")
+        raw_label, confidence, reasoning = _try_parse(raw)
     except (json.JSONDecodeError, ValueError):
-        raw_label, confidence, reasoning = "UNRESOLVED", 0.0, "Could not parse agent response."
+        # Some models (particularly reasoning models) occasionally add
+        # stray text before/after the JSON object despite instructions
+        # not to, or get cut off mid-object if they spend more tokens
+        # on internal reasoning than expected. Before giving up, try
+        # extracting just the {...} substring and parsing that alone.
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
+            try:
+                raw_label, confidence, reasoning = _try_parse(match.group(0))
+            except (json.JSONDecodeError, ValueError):
+                raw_label, confidence, reasoning = "UNRESOLVED", 0.0, "Could not parse agent response."
+                print(f"  [diagnostic] Unparseable AI response (first 300 chars, no key present): {raw[:300]!r}", flush=True)
+        else:
+            raw_label, confidence, reasoning = "UNRESOLVED", 0.0, "Could not parse agent response."
+            print(f"  [diagnostic] Unparseable AI response (first 300 chars, no key present): {raw[:300]!r}", flush=True)
 
     deferred = confidence < CONFIDENCE_THRESHOLD
     final_label = "NEEDS_HUMAN_REVIEW" if deferred else raw_label
