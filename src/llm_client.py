@@ -33,7 +33,7 @@ _working_model = None  # cached once a working model is found
 
 # Minimum gap enforced between any two calls, to stay under free-tier
 # rate limits even when running many cases back to back.
-_MIN_SECONDS_BETWEEN_CALLS = 4
+_MIN_SECONDS_BETWEEN_CALLS = 2
 _last_call_time = 0
 
 
