@@ -28,8 +28,8 @@ API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 _CANDIDATE_MODELS = [
     os.environ.get("AI_MODEL"),  # explicit override, if set
-    "llama-3.1-8b-instant",      # fast, high daily quota, sufficient for structured classification
-    "llama-3.3-70b-versatile",   # fallback if the smaller model is ever retired/unavailable
+    "openai/gpt-oss-20b",        # fast, Groq's recommended replacement for the now-retired llama-3.1-8b-instant
+    "openai/gpt-oss-120b",       # fallback, Groq's recommended replacement for the now-retired llama-3.3-70b-versatile
 ]
 _CANDIDATE_MODELS = [m for m in _CANDIDATE_MODELS if m]
 
@@ -105,6 +105,20 @@ def call_llm(prompt, max_tokens=300, retries=2):
                 # retry the same model with a short backoff rather than
                 # immediately giving up on it.
                 last_error = e
+                # Diagnostic detail: if the server actually responded
+                # (e.g. a 4xx/5xx from raise_for_status), show the real
+                # status code and a truncated response body so failures
+                # are debuggable instead of just "HTTPError". The
+                # Authorization header (where the key lives) is never
+                # part of the response and is never printed here.
+                resp_obj = getattr(e, "response", None)
+                if resp_obj is not None:
+                    status = resp_obj.status_code
+                    try:
+                        body_snippet = resp_obj.text[:300]
+                    except Exception:
+                        body_snippet = "(could not read response body)"
+                    print(f"  HTTP {status} from {model}: {body_snippet}", flush=True)
                 if attempt < retries:
                     wait_time = 5 * (attempt + 1)
                     print(f"  Network hiccup ({type(e).__name__}), retrying in {wait_time}s...", flush=True)
