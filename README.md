@@ -129,7 +129,7 @@ UNRESOLVED EXCEPTIONS
 ```bash
 pip install -r requirements.txt
 
-export AI_API_KEY=your_key_here   # get a free key: https://aistudio.google.com/app/apikey
+export AI_API_KEY=your_key_here   # get a free key: https://console.groq.com/keys
 
 # 1. Generate synthetic data
 python3 src/generate_data.py
@@ -209,7 +209,7 @@ rather than checking it against the same logic it might share blind
 spots with.
 
 ```bash
-export AI_API_KEY=your_key_here   # get a free key: https://aistudio.google.com/app/apikey
+export AI_API_KEY=your_key_here   # get a free key: https://console.groq.com/keys
 python3 tests/eval_agent.py
 ```
 
