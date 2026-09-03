@@ -2,17 +2,20 @@
 Thin wrapper around a generative AI API (called directly via REST, no SDK
 dependency needed), used by both agent.py and explain.py.
 
-Runs on a free-tier model - no billing required. Set your API key as
-AI_API_KEY before running any script that uses this module.
+Runs on Groq's free tier - no billing required. Get a free key at
+https://console.groq.com/keys and set it as AI_API_KEY. Groq's free
+tier (30 requests/min, 14,400/day, no card needed) runs on dedicated
+LPU hardware, which responds noticeably faster than typical GPU-hosted
+free tiers - this is the main reason for using it here.
 
 Two things the free tier requires handling for:
   1. Model names change fairly often as older versions are retired, so
      calls try a short list of candidate models in order and cache
      whichever one responds successfully.
-  2. The free tier has a low rate limit (requests per minute). A 429
-     response means "wait and retry," not "this model is broken" - so
-     429s get a longer backoff and retry, separate from other errors
-     which move on to the next candidate model.
+  2. Rate limits still apply. A 429 response means "wait and retry,"
+     not "this model is broken" - so 429s get a longer backoff and
+     retry, separate from other errors which move on to the next
+     candidate model.
 """
 
 import os
@@ -21,24 +24,22 @@ import requests
 
 AI_API_KEY = os.environ.get("AI_API_KEY")
 
+API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
 _CANDIDATE_MODELS = [
     os.environ.get("AI_MODEL"),  # explicit override, if set
-    "gemini-flash-latest",
-    "gemini-2.5-flash",
-    "gemini-flash-lite-latest",
+    "llama-3.1-8b-instant",      # fast, high daily quota, sufficient for structured classification
+    "llama-3.3-70b-versatile",   # fallback if the smaller model is ever retired/unavailable
 ]
 _CANDIDATE_MODELS = [m for m in _CANDIDATE_MODELS if m]
 
 _working_model = None  # cached once a working model is found
 
-# Minimum gap enforced between any two calls, to stay under free-tier
-# rate limits even when running many cases back to back.
+# Minimum gap enforced between any two calls, to stay under the free
+# tier's 30-requests-per-minute limit even when running many cases
+# back to back.
 _MIN_SECONDS_BETWEEN_CALLS = 2
 _last_call_time = 0
-
-
-def _url_for(model):
-    return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
 def _wait_for_rate_limit():
@@ -52,22 +53,23 @@ def _wait_for_rate_limit():
 def call_llm(prompt, max_tokens=300, retries=2):
     """
     Sends a single-turn prompt to a working model and returns the plain
-    text response. Automatically paces calls to respect free-tier rate
-    limits, and retries the same model with backoff on rate limits (429)
-    and transient network errors (timeouts, connection drops) before
-    giving up on that model and trying the next candidate.
+    text response. Automatically paces calls to respect the free-tier
+    rate limit, and retries the same model with backoff on rate limits
+    (429) and transient network errors (timeouts, connection drops)
+    before giving up on that model and trying the next candidate.
     """
     global _working_model
 
     if not AI_API_KEY:
         raise RuntimeError(
             "AI_API_KEY is not set. Get a free key at "
-            "https://aistudio.google.com/app/apikey and set it as an "
+            "https://console.groq.com/keys and set it as an "
             "environment variable before running this script."
         )
 
     models_to_try = [_working_model] if _working_model else _CANDIDATE_MODELS
     last_error = None
+    headers = {"Authorization": f"Bearer {AI_API_KEY}"}
 
     for model in models_to_try:
         attempt = 0
@@ -75,11 +77,12 @@ def call_llm(prompt, max_tokens=300, retries=2):
             _wait_for_rate_limit()
             try:
                 resp = requests.post(
-                    _url_for(model),
-                    params={"key": AI_API_KEY},
+                    API_URL,
+                    headers=headers,
                     json={
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {"maxOutputTokens": max_tokens},
+                        "model": model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": max_tokens,
                     },
                     timeout=60,
                 )
@@ -93,7 +96,7 @@ def call_llm(prompt, max_tokens=300, retries=2):
 
                 resp.raise_for_status()
                 data = resp.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                text = data["choices"][0]["message"]["content"].strip()
                 _working_model = model
                 return text
 
@@ -117,6 +120,6 @@ def call_llm(prompt, max_tokens=300, retries=2):
 
     raise RuntimeError(
         f"All candidate models failed (tried {models_to_try}). "
-        f"Last error: {last_error}. Check https://ai.google.dev/gemini-api/docs/models "
+        f"Last error: {last_error}. Check https://console.groq.com/docs/models "
         f"for currently available model names and set AI_MODEL to override."
     )
