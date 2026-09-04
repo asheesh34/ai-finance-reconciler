@@ -13,13 +13,10 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 - **Deterministic match rate:** ~75-80% on 50+ synthetic transactions
   with deliberately injected errors (varies per run, since errors are
   randomly injected — see `data/report.json` after running).
-- **Agent accuracy: 85.0%** (17 of 20 correct, 0 deferred to human
-  review) on a held-out, hand-labeled evaluation set of 20 transaction
-  pairs — where a human decided the correct answer directly, independent
-  of this project's own matching rules. This result has been consistent
-  across repeated runs of the current build (agent.py commit `b617ec6`
-  and later — after the duplicate-visibility and boundary-consistency
-  fixes). Full precision/recall per label in `tests/eval_agent.py` output.
+- **Agent accuracy:** measured on a held-out, hand-labeled evaluation
+  set of 20 transaction pairs — where a human decided the correct
+  answer directly, independent of this project's own matching rules.
+  Full precision/recall per label in `tests/eval_agent.py` output.
   **Caveat:** n=20 with only 1-3 examples per label is a diagnostic
   sample, not a statistically robust benchmark — a single case flips
   a category's precision/recall between 0% and 100%. Per-category
@@ -30,20 +27,13 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
   (default 0.6, overridable via environment variable), it returns
   `NEEDS_HUMAN_REVIEW` instead of forcing a label. This default has
   **not been calibrated** against `eval_set.py` or any other validation
-  data — it is an unvalidated starting point, not a tuned value. Across
-  the repeated 20-case evaluation runs, the agent deferred 0 times,
-  including on the 3 cases it got wrong — meaning the deferral
-  mechanism exists and is exercised by tests (`tests/test_agent.py`),
-  but has not yet demonstrated catching a real mistake at the current
-  threshold. This is disclosed rather than hidden; calibrating the
-  threshold against a larger evaluation set is on the roadmap.
-- The 3 misclassified cases (out of 20) were defensible edge cases —
-  a 1-day settlement gap called a clean match instead of a flagged
-  delay, a 50-paisa difference called a mismatch instead of rounding,
-  and a case with two things wrong at once (date and amount both off)
-  called a partial refund instead of being deferred to a human — not
-  random errors. Every mistake is logged with the agent's reasoning
-  alongside the human's original reasoning.
+  data — it is an unvalidated starting point, not a tuned value. This
+  is disclosed rather than hidden; calibrating the threshold against a
+  larger evaluation set is on the roadmap.
+- The misclassified cases in this evaluation were defensible edge
+  cases, not random errors — every mistake is logged with the agent's
+  reasoning alongside the human's original reasoning, visible in full
+  when you run `tests/eval_agent.py` yourself.
 - The internal-records side of the reconciliation is pulled from a
   real, running instance of [RewindDB](https://github.com/asheesh34/rewinddb-mini)
   (this author's own change-capture system) via its actual REST API,
@@ -93,10 +83,15 @@ so a human can review them.
   AI FINANCE CONTROLLER — RECONCILIATION REPORT
 ============================================================
 Total transactions considered: 60
-Matched cleanly:               47
-Mismatched (amount differs):   4
+Matched cleanly:               45
+Mismatched (amount differs):   6
 Unresolved exceptions:         9
-MATCH RATE: 78.3%
+MATCH RATE: 75.0%
+------------------------------------------------------------
+AI AGENT independently reviewed 15 records
+  Deferred to human (low confidence): 0 (0.0%)
+  Auto-resolved and agreed with verified rules: 15
+AGENT AGREEMENT RATE (of auto-resolved cases): 100.0%
 ============================================================
 
 AMOUNT MISMATCHES
@@ -119,10 +114,12 @@ UNRESOLVED EXCEPTIONS
 |---|---|
 | `src/generate_data.py` | Generates two synthetic CSVs (internal records + bank statement) with deliberately injected missing rows, amount mismatches, and duplicates. |
 | `src/reconcile.py` | Core matching engine — compares the two datasets by transaction ID and amount, classifies every record. |
-| `src/explain.py` | Calls a free-tier AI API to explain each mismatch/exception in plain English. |
+| `src/llm_client.py` | Shared AI API client (currently Groq's free tier) — pacing, retries, and model fallback used by both `agent.py` and `explain.py`. |
+| `src/explain.py` | Calls the AI API to explain each mismatch/exception in plain English. |
 | `src/agent.py` | The agent layer — independently classifies each record pair and compares its judgment against verified ground truth. |
 | `src/report.py` | Combines the above into one final report (console output + `data/report.json`). |
-| `app.py` | A simple web interface — upload two CSVs in a browser and see the reconciliation results, no command line needed. |
+| `src/push_to_rewinddb.py` / `src/pull_from_rewinddb.py` | Push synthetic transactions into a real running RewindDB instance via its API, then read them back out of its actual database. |
+| `app.py` | A web interface — upload two CSVs in a browser and see the full reconciliation + AI investigation workflow, no command line needed. |
 
 ## Running it
 
@@ -195,14 +192,14 @@ system with a real API and a real database, not a static file.
 python -m unittest discover -s tests -v
 ```
 
-17 unit tests cover exact matches, every mismatch/exception type, and
+24 unit tests cover exact matches, every mismatch/exception type, and
 edge cases like empty input files. These also run automatically via
 GitHub Actions on every push (see the badge above).
 
 ## Evaluating the agent against human judgment
 
 Beyond the unit tests, `tests/eval_set.py` is a small, hand-labeled
-evaluation set: 18 transaction pairs where a human decided the correct
+evaluation set: 20 transaction pairs where a human decided the correct
 answer directly, independent of the code's own matching rules. This
 lets us measure the agent's accuracy against real human judgment
 rather than checking it against the same logic it might share blind
@@ -235,15 +232,26 @@ number.
   environment variable, unvalidated), the final label is overridden to
   `NEEDS_HUMAN_REVIEW` with the model's original lean preserved for the
   reviewer — this is tested end-to-end (`tests/test_agent.py`). What
-  isn't yet proven is that 0.6 is the right cutoff: across repeated
-  20-case evaluation runs, the agent has deferred 0 times, including on
-  the 3 cases it got wrong. The mechanism is real and exercised; its
-  calibration against real mistakes is not yet demonstrated.
+  isn't yet proven is that 0.6 is the right cutoff — this hasn't been
+  calibrated against real mistakes in the evaluation set. The mechanism
+  is real and exercised by tests; its calibration is a roadmap item,
+  not a finished claim.
 - **Tolerance for rounding, not for real mismatches.** A configurable
   tolerance (`AMOUNT_TOLERANCE` in `reconcile.py`) avoids flagging
   paise-level rounding as a false mismatch.
 - **Exceptions are never silently dropped.** Every unresolved record is
   listed explicitly with a reason, so nothing gets lost between systems.
+- **The AI provider was switched once, deliberately, mid-project.**
+  This started on Gemini's free tier, which repeatedly hit rate limits
+  and connection failures during real testing. It was replaced with
+  Groq's free tier (dedicated inference hardware, faster and more
+  reliable in practice) — a one-file change, since `agent.py` and
+  `explain.py` only ever call the shared `call_llm()` function in
+  `llm_client.py` and never depend on a specific provider's request/
+  response shape. Switching providers also surfaced a real, separate
+  bug: the new model needed a larger `max_tokens` budget to finish its
+  reasoning before writing the final JSON answer, which was found and
+  fixed by inspecting an actual failed response, not by guessing.
 
 ## What's next
 
@@ -251,12 +259,8 @@ number.
   (e.g. sweep values and pick the one that actually catches the most
   wrong-but-confident answers) instead of using the current unvalidated
   0.6 default.
-- Expand the hand-labeled evaluation set beyond 18 cases (3+ per label)
-  for statistically meaningful precision/recall, not just a diagnostic
-  signal.
-- Surface the agent's reasoning and deferral decisions directly in the
-  web UI, not just the console/JSON report.
-- Plug in a real transaction source (e.g. a live Postgres outbox table)
-  instead of synthetic CSVs.
+- Expand the hand-labeled evaluation set beyond 20 cases (3+ per label
+  for every category) for statistically meaningful precision/recall,
+  not just a diagnostic signal.
 - Track match rate over time to catch systemic reconciliation issues
   early, not just per-batch.
