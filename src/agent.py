@@ -177,7 +177,7 @@ Respond with ONLY a JSON object, no other text. Write "reasoning" first
 so your label and confidence follow from it, in this exact format:
 {{"reasoning": "one short sentence, including your percentage calculation if amounts differ", "label": "...", "confidence": 0.0}}"""
 
-    raw = call_llm(prompt, max_tokens=600)
+    raw = call_llm(prompt, max_tokens=900)
 
     # Be defensive - strip markdown fences if the model adds them anyway
     raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
