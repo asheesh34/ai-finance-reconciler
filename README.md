@@ -13,8 +13,8 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 - **Deterministic match rate:** ~75-80% on 50+ synthetic transactions
   with deliberately injected errors (varies per run, since errors are
   randomly injected — see `data/report.json` after running).
-- **Agent accuracy: 85.0%** (17 of 20 correct, 0 deferred) on a
-  held-out, hand-labeled evaluation set of 20 transaction pairs —
+- **Agent accuracy: 84.2% (16 of 19 auto-resolved cases correct, 3 misclassified, 1 deferred to human review)**
+  on an independently hand-labeled evaluation set of 20 transaction pairs —
   where a human decided the correct answer directly, independent of
   this project's own matching rules. Measured on Groq's
   `openai/gpt-oss-20b`, the current AI provider. Full precision/recall
@@ -24,16 +24,14 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
   a category's precision/recall between 0% and 100%. Per-category
   metrics should be read as indicative, not proof. Expanding this
   set further is the natural next step (see What's next).
-- **The agent supports confidence-based deferral to human review** —
-  if its own stated confidence falls below `CONFIDENCE_THRESHOLD`
+- The agent supports confidence-based deferral to human review — if
+  its own stated confidence falls below `CONFIDENCE_THRESHOLD`
   (default 0.6, overridable via environment variable), it returns
   `NEEDS_HUMAN_REVIEW` instead of forcing a label. This default has
   **not been calibrated** against `eval_set.py` or any other validation
   data — it is an unvalidated starting point, not a tuned value. In the
-  latest run the agent deferred 0 times, including on the 3 cases it
-  got wrong — the mechanism exists and is tested end-to-end
-  (`tests/test_agent.py`), but hasn't yet demonstrated catching a real
-  mistake at the current threshold. This is disclosed rather than
+  latest evaluation the agent deferred 1 case to human review, while 3
+  auto-resolved cases were misclassified. This is disclosed rather than
   hidden; calibrating the threshold against a larger evaluation set is
   on the roadmap.
 - The 3 misclassified cases (of 20) were defensible edge cases — a
@@ -69,14 +67,18 @@ This is a reconciliation **agent** that:
    **matched**, or one of several distinct mismatch/exception types
    (`AMOUNT_MISMATCH`, `LIKELY_PARTIAL_REFUND`, `MERCHANT_NAME_MISMATCH`,
    `MISSING_IN_BANK`/`MISSING_IN_INTERNAL`, `DUPLICATE_IN_BANK`). A
-   settlement delay of a few days is still counted as matched, since
-   that's normal behavior, not a real problem.
-3. Separately, an AI agent independently looks at every record pair and
-   decides its own classification, with a confidence score and plain
-   reasoning — without being told the deterministic answer first.
+   Small date differences within the configured settlement window are
+   still counted as matched, since they can represent normal
+   settlement behavior.
+3. Separately, an AI agent independently looks at mismatches and
+   exceptions and decides its own classification, with a confidence
+   score and plain reasoning — without being told the deterministic
+   answer first.
 4. Compares the agent's independent judgment against the verified
    deterministic result and reports an **agreement rate** — a second,
    honest accuracy metric, not just a plausible-sounding explanation.
+   Separately, the agent is evaluated against human-labeled ground
+   truth using a 20-case evaluation set.
 5. Reports an overall **match rate**, the **agent agreement rate**, and
    every case the agent and the rules disagreed on — visible, not hidden.
 
@@ -122,12 +124,11 @@ UNRESOLVED EXCEPTIONS
 
 | File | Purpose |
 |---|---|
-| `src/generate_data.py` | Generates two synthetic CSVs (internal records + bank statement) with deliberately injected missing rows, amount mismatches, and duplicates. |
-| `src/reconcile.py` | Core matching engine — compares the two datasets by transaction ID and amount, classifies every record. |
+| `src/generate_data.py` | Generates two synthetic CSVs (internal records + bank statement) with deliberately injected missing rows, amount mismatches, duplicates, partial refunds, settlement delays, and merchant-name variations. |
+| `src/reconcile.py` | Core matching engine — compares the two datasets by transaction ID, amount, date, and merchant name, and classifies every record. |
 | `src/llm_client.py` | Shared AI API client (currently Groq's free tier) — pacing, retries, and model fallback used by both `agent.py` and `explain.py`. |
 | `src/explain.py` | Calls the AI API to explain each mismatch/exception in plain English. |
 | `src/agent.py` | The agent layer — independently classifies each record pair and compares its judgment against verified ground truth. |
-| `src/llm_client.py` | Shared API client — handles authentication, pacing, rate-limit backoff, and model fallback for whichever AI provider is configured. |
 | `src/report.py` | Combines the above into one final report (console output + `data/report.json`). |
 | `src/push_to_rewinddb.py` / `src/pull_from_rewinddb.py` | Push synthetic transactions into a real running RewindDB instance via its API, then read them back out of its actual database. |
 | `app.py` | A web interface — upload two CSVs in a browser and see the full reconciliation + AI investigation workflow, no command line needed. |
@@ -153,7 +154,7 @@ Output is printed to the console and saved to `data/report.json`.
 For anyone who doesn't want to use the command line, `app.py` provides
 a simple browser-based version: upload two CSVs, click a button, see
 the full workflow in one page — deterministic match rate, then an AI
-investigation of every mismatch and exception.
+investigation of mismatches and exceptions.
 
 ```bash
 pip install -r requirements.txt
@@ -215,6 +216,9 @@ answer directly, independent of the code's own matching rules. This
 lets us measure the agent's accuracy against real human judgment
 rather than checking it against the same logic it might share blind
 spots with.
+
+**This 20-case evaluation is separate from the 60-record synthetic
+demo batch shown in the Example output section.**
 
 ```bash
 export AI_API_KEY=your_key_here   # get a free key: https://console.groq.com/keys
