@@ -6,7 +6,7 @@ resolved automatically - not just a status code.
 
 Uses a free-tier AI API (via llm_client.py) - no billing
 required to run this. Requires AI_API_KEY to be set in the
-environment (get a free key at https://aistudio.google.com/app/apikey).
+environment (get a free key at https://console.groq.com/keys).
 """
 
 import json

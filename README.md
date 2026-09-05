@@ -117,6 +117,7 @@ UNRESOLVED EXCEPTIONS
 | `src/llm_client.py` | Shared AI API client (currently Groq's free tier) — pacing, retries, and model fallback used by both `agent.py` and `explain.py`. |
 | `src/explain.py` | Calls the AI API to explain each mismatch/exception in plain English. |
 | `src/agent.py` | The agent layer — independently classifies each record pair and compares its judgment against verified ground truth. |
+| `src/llm_client.py` | Shared API client — handles authentication, pacing, rate-limit backoff, and model fallback for whichever AI provider is configured. |
 | `src/report.py` | Combines the above into one final report (console output + `data/report.json`). |
 | `src/push_to_rewinddb.py` / `src/pull_from_rewinddb.py` | Push synthetic transactions into a real running RewindDB instance via its API, then read them back out of its actual database. |
 | `app.py` | A web interface — upload two CSVs in a browser and see the full reconciliation + AI investigation workflow, no command line needed. |
