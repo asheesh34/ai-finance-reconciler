@@ -13,10 +13,12 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 - **Deterministic match rate:** ~75-80% on 50+ synthetic transactions
   with deliberately injected errors (varies per run, since errors are
   randomly injected — see `data/report.json` after running).
-- **Agent accuracy:** measured on a held-out, hand-labeled evaluation
-  set of 20 transaction pairs — where a human decided the correct
-  answer directly, independent of this project's own matching rules.
-  Full precision/recall per label in `tests/eval_agent.py` output.
+- **Agent accuracy: 85.0%** (17 of 20 correct, 0 deferred) on a
+  held-out, hand-labeled evaluation set of 20 transaction pairs —
+  where a human decided the correct answer directly, independent of
+  this project's own matching rules. Measured on Groq's
+  `openai/gpt-oss-20b`, the current AI provider. Full precision/recall
+  per label in `tests/eval_agent.py` output.
   **Caveat:** n=20 with only 1-3 examples per label is a diagnostic
   sample, not a statistically robust benchmark — a single case flips
   a category's precision/recall between 0% and 100%. Per-category
@@ -27,12 +29,20 @@ Built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
   (default 0.6, overridable via environment variable), it returns
   `NEEDS_HUMAN_REVIEW` instead of forcing a label. This default has
   **not been calibrated** against `eval_set.py` or any other validation
-  data — it is an unvalidated starting point, not a tuned value. This
-  is disclosed rather than hidden; calibrating the threshold against a
-  larger evaluation set is on the roadmap.
-- The misclassified cases in this evaluation were defensible edge
-  cases, not random errors — every mistake is logged with the agent's
-  reasoning alongside the human's original reasoning, visible in full
+  data — it is an unvalidated starting point, not a tuned value. In the
+  latest run the agent deferred 0 times, including on the 3 cases it
+  got wrong — the mechanism exists and is tested end-to-end
+  (`tests/test_agent.py`), but hasn't yet demonstrated catching a real
+  mistake at the current threshold. This is disclosed rather than
+  hidden; calibrating the threshold against a larger evaluation set is
+  on the roadmap.
+- The 3 misclassified cases (of 20) were defensible edge cases — a
+  1-day settlement gap called a clean match instead of a flagged
+  delay, a 50-paisa difference called a mismatch instead of rounding,
+  and a known parent-company billing name (BigTree Ent for
+  BookMyShow) called a merchant mismatch — not random errors. Every
+  mistake is logged with the agent's reasoning alongside the human's
+  original reasoning, visible in full
   when you run `tests/eval_agent.py` yourself.
 - The internal-records side of the reconciliation is pulled from a
   real, running instance of [RewindDB](https://github.com/asheesh34/rewinddb-mini)
